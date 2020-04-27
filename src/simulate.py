@@ -1,9 +1,8 @@
 import networkx as nx
 import numpy as np
 from numpy import random as rnd
+import matplotlib.pyplot as plt
 
-# the format of the genealogy is:
-# ind_id \t father_id \t mother_id \t time (in generations, optional)
 
 def simulate_wf_genealogy(sample_size, population_size, generations, individual_completeness = 1):
     """Simulate a genealogy from a Wright-Fisher population
@@ -47,7 +46,8 @@ def simulate_wf_genealogy(sample_size, population_size, generations, individual_
                 parent_ID = parents + (population_size * t)
 
                 for i in [0,1]:
-                    G.add_node(parent_ID[i], generation=t, x=parents[i], parents=[])
+                    G.add_node(parent_ID[i], generation=t,
+                               x=parents[i], parents=[])
                     G.add_edge(individual, parent_ID[i])
                     G.nodes[individual]['parents'].append(parent_ID[i])
                     next_gen.add(parent_ID[i])
@@ -69,4 +69,8 @@ def get_plotting_coord(G):
 
 if __name__ == '__main__':
     g = simulate_wf_genealogy(5, 20, generations=3)
-    nx.draw(g, pos=get_plotting_coord(g), with_labels=True, node_shape='s')
+
+    fig, ax = plt.subplots(dpi=300)
+    nx.draw(g, pos=get_plotting_coord(g),
+            with_labels=True, node_shape='s', ax=ax)
+    fig.savefig('fig/simulate.png')
