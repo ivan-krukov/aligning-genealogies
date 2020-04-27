@@ -68,9 +68,19 @@ def get_plotting_coord(G):
     
 
 if __name__ == '__main__':
+
+    ## simulation
     g = simulate_wf_genealogy(5, 20, generations=3)
 
+    ## plot example
     fig, ax = plt.subplots(dpi=300)
     nx.draw(g, pos=get_plotting_coord(g),
             with_labels=True, node_shape='s', ax=ax)
     fig.savefig('fig/simulate.png')
+    
+    ## export example
+    nx.write_adjlist(g, 'cached/simulation_1.txt', delimiter='\t')
+    h = nx.read_adjlist('cached/simulation_1.txt', nodetype=int)
+    # roundtrip
+    assert(sorted(h.nodes) == sorted(g.nodes))
+    # assert(sorted(h.edges) == sorted(g.edges)) # this needs a deep comparison
