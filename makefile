@@ -1,2 +1,2 @@
-fig/simulate.png: src/simulate.png
+fig/simulate.png: src/simulate.py
 	python $<
