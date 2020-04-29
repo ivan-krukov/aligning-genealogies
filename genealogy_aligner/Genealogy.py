@@ -127,6 +127,26 @@ class Genealogy(nx.DiGraph):
         return G
 
 
+    def sample_tree(self):
+        """Sample a coalescent path from a genealogy
+
+        Startin at the probands, randomly choose a parent.
+        Stop once founder individuals (t=0) is reached"""
+        current_gen = self.probands()
+        T = Genealogy(self.generations)
+        T.add_nodes_from(current_gen, time=self.generations)
+        prev_gen = []
+        for t in reversed(range(self.generations)):
+            for individual in current_gen:
+                parent = rnd.choice(list(self.predecessors(individual)))
+                T.add_node(parent)
+                T.add_edge(parent, individual)
+                prev_gen.append(parent)
+            current_gen = prev_gen
+            prev_gen = []
+        return T
+
+
     def draw(self, labels=True, ax=None):
         """Uses `graphviz` to plot the genealogy"""
         pos = nx.drawing.nx_agraph.graphviz_layout(self, prog='dot')
