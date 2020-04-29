@@ -5,10 +5,14 @@ from numpy import random as rnd
 
 
 class Genealogy(nx.DiGraph):
-    def __init__(self, generations):
-        super().__init__(self)
-        self.generations = generations
 
+    @classmethod
+    def from_digraph(cls, D):
+        G = D.copy()
+        G.generations = nx.dag_longest_path_length(G)
+        return G
+
+    
     @property
     def n_individuals(self):
         return len(self.nodes)
@@ -95,8 +99,7 @@ class Genealogy(nx.DiGraph):
             x: int         - index (out of N), for plotting
             parents: [int] - list of parent IDs - redundant - used for testing
         """
-        G = cls(generations)
-        
+        G = cls()
 
         current_gen = []
         next_gen = []
@@ -124,6 +127,7 @@ class Genealogy(nx.DiGraph):
             current_gen = next_gen
             next_gen = []
 
+        G.generations = nx.dag_longest_path_length(G)
         return G
 
 
@@ -133,7 +137,8 @@ class Genealogy(nx.DiGraph):
         Starting at the probands, randomly choose a parent.
         Stop once founder individuals (t=0) are reached"""
         current_gen = set(self.probands())
-        T = Genealogy(self.generations)
+        T = Genealogy()
+        T.generations = self.generations
         T.add_nodes_from(current_gen, time=self.generations)
         
         for t in reversed(range(self.generations)):
