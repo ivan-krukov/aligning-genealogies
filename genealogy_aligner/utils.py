@@ -63,3 +63,10 @@ def convert_msprime_genealogy_to_nx(fname, directed=False):
     nx.set_node_attributes(gg, dict(zip(gen_df['ind_id'], gen_df['sex'])), 'sex')
 
     return gg
+
+
+def draw_graphviz(G, labels=True, ax=None):
+    """Uses `graphviz` to plot the genealogy"""
+    pos = nx.drawing.nx_agraph.graphviz_layout(G, prog='dot')
+    nx.draw(G, pos=pos, with_labels=labels, node_shape='s', ax=ax)
+
