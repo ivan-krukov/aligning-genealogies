@@ -2,21 +2,11 @@ import networkx as nx
 from itertools import count
 import numpy as np
 from numpy import random as rnd
+from Genealogical import Genealogical
+from Traversal import Traversal
 
 
-class Genealogy(nx.DiGraph):
-
-    @classmethod
-    def from_digraph(cls, D):
-        G = D.copy()
-        G.generations = nx.dag_longest_path_length(G)
-        return G
-
-    
-    @property
-    def n_individuals(self):
-        return len(self.nodes)
-
+class Genealogy(Genealogical):
     
     def add_couple(self, mat_id, pat_id, time):
         self.add_node(mat_id, time=time)
@@ -135,9 +125,13 @@ class Genealogy(nx.DiGraph):
         """Sample a coalescent path from a genealogy
 
         Starting at the probands, randomly choose a parent.
-        Stop once founder individuals (t=0) are reached"""
+        Stop once founder individuals (t=0) are reached
+
+        Returns:
+        --------
+        A `Traversal` object"""
         current_gen = set(self.probands())
-        T = Genealogy()
+        T = Traversal()
         T.generations = self.generations
         T.add_nodes_from(current_gen, time=self.generations)
         
@@ -150,10 +144,3 @@ class Genealogy(nx.DiGraph):
                 prev_gen.add(parent)
             current_gen = prev_gen
         return T
-
-
-    def draw(self, labels=True, ax=None, **kwargs):
-        """Uses `graphviz` to plot the genealogy"""
-        pos = nx.drawing.nx_agraph.graphviz_layout(self, prog='dot')
-        nx.draw(self, pos=pos, with_labels=labels, node_shape='s', ax=ax, font_color='white', font_size=8, **kwargs)
-
