@@ -49,7 +49,7 @@ class Genealogy(Genealogical):
         
 
     @classmethod
-    def from_founders(cls, families, generations, mean_offspring=2):
+    def from_founders(cls, families, generations, mean_offspring=2, mean_out_of_family=2):
         """Simulate a genealogy forward in time, starting with `families` starting families
 
         Parameters
@@ -60,6 +60,8 @@ class Genealogy(Genealogical):
             Number of generations to simulate
         mean_offspring: float
             Average number of children per family, mean of Poisson RV
+        mean_out_of_family: float
+            Average number of out-of family individuals added each generation
         Returns
         -------
         nx.Graph
@@ -83,7 +85,7 @@ class Genealogy(Genealogical):
 
         for t in range(1, generations+1):
             # if one individual is left, it produces no offspring
-            while len(current_gen) >= 2: 
+            while len(current_gen) >= 2:
                 mat_id, pat_id = rnd.choice(current_gen, 2, replace=False)
                 current_gen.remove(mat_id)
                 current_gen.remove(pat_id)
@@ -93,7 +95,14 @@ class Genealogy(Genealogical):
                     child_id = next(id_counter)
                     next_gen.append(child_id)
                     G.add_child(child_id, mat_id, pat_id, t)
-                    
+
+            # add extra out-of-family individuals
+            new_arrivals = rnd.poisson(mean_out_of_family)
+            for ind in range(new_arrivals):
+                ind_id = next(id_counter)
+                next_gen.append(ind_id)
+                G.add_individual(ind_id, t)
+
             current_gen = next_gen
             next_gen = []
 
@@ -116,9 +125,13 @@ class Genealogy(Genealogical):
         for t in reversed(range(self.generations)):
             prev_gen = set()
             for individual in current_gen:
-                parent = rnd.choice(list(self.predecessors(individual)))
-                T.add_node(parent, time=t)
-                T.add_edge(parent, individual)
-                prev_gen.add(parent)
+                parents = list(self.predecessors(individual))
+                if parents:
+                    parent = rnd.choice(parents)
+                    T.add_node(parent, time=t)
+                    T.add_edge(parent, individual)
+                    prev_gen.add(parent)
+                
+                    
             current_gen = prev_gen
         return T

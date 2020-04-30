@@ -23,6 +23,9 @@ class Genealogical(nx.DiGraph):
                 node_list.append(node)
         return node_list
 
+    def node_attribute(self, attribute):
+        return (node[1]['time'] for node in self.nodes(data=True))
+
     
     def founders(self):
         """Get a list of individuals at time 0"""
