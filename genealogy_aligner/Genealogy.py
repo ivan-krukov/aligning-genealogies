@@ -22,26 +22,6 @@ class Genealogy(Genealogical):
         self.add_edge(mat_id, child_id)
         self.add_edge(pat_id, child_id)
 
-
-    def filter_nodes(self, predicate):
-        node_list = []
-        for node, data in self.nodes(data=True):
-            if predicate(node, data):
-                node_list.append(node)
-        return node_list
-
-    
-    def founders(self):
-        """Get a list of individuals at time 0"""
-        return self.filter_nodes(
-            lambda node, data: data['time'] == 0)
-    
-
-    def probands(self):
-        """Get a list of individuals at present day"""
-        return self.filter_nodes(
-            lambda node, data: data['time'] == self.generations)
-
     
     def parents(self, i):
         return list(self.predecessors(i))
@@ -117,7 +97,6 @@ class Genealogy(Genealogical):
             current_gen = next_gen
             next_gen = []
 
-        G.generations = nx.dag_longest_path_length(G)
         return G
 
 
@@ -132,14 +111,13 @@ class Genealogy(Genealogical):
         A `Traversal` object"""
         current_gen = set(self.probands())
         T = Traversal()
-        T.generations = self.generations
         T.add_nodes_from(current_gen, time=self.generations)
         
         for t in reversed(range(self.generations)):
             prev_gen = set()
             for individual in current_gen:
                 parent = rnd.choice(list(self.predecessors(individual)))
-                T.add_node(parent)
+                T.add_node(parent, time=t)
                 T.add_edge(parent, individual)
                 prev_gen.add(parent)
             current_gen = prev_gen
