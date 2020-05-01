@@ -106,7 +106,14 @@ class Genealogy(Genealogical):
             current_gen = next_gen
             next_gen = []
 
-        return G
+        if nx.is_weakly_connected(G):
+            return G
+        else:
+            # if multiple subgraphs, return largest
+            largest = max(nx.weakly_connected_components(G), key=len)
+            Gl = nx.subgraph(G, largest)
+            # relabel
+            return nx.convert_node_labels_to_integers(Gl, ordering='sorted')
 
 
     def sample_tree(self):

@@ -40,6 +40,6 @@ class Genealogical(nx.DiGraph):
 
 
     def draw(self, labels=True, ax=None, **kwargs):
-        """Uses `graphviz` to plot the genealogy"""
+        """Uses `graphviz` `dot` to plot the genealogy"""
         pos = nx.drawing.nx_agraph.graphviz_layout(self, prog='dot')
         nx.draw(self, pos=pos, with_labels=labels, node_shape='s', ax=ax, font_color='white', font_size=8, **kwargs)
