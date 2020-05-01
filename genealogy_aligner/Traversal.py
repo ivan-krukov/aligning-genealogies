@@ -25,3 +25,9 @@ class Traversal(Genealogical):
                     K[j,i] = K[i,j]
         return K
 
+    def draw(self, labels=True, ax=None, **kwargs):
+        """Uses `graphviz` `dot` to plot the genealogy"""
+        rev = self.reverse()
+        pos = nx.drawing.nx_agraph.graphviz_layout(rev, prog='dot',
+                                                   args='-Grankdir=BT')
+        nx.draw(rev, pos=pos, with_labels=labels, node_shape='s', ax=ax, font_color='white', font_size=8, arrows=False, **kwargs)
