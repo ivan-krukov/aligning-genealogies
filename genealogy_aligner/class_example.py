@@ -10,7 +10,7 @@ while G.generations < generations:
     print('retrying')
     G = Genealogy.from_founders(families, generations, avg_children)
     
-T = G.sample_tree()
+T = G.sample_path()
 
 fig, ax = plt.subplots(ncols=2, figsize=(20, 10))
 

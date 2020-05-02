@@ -1,13 +1,13 @@
 import networkx as nx
+import numpy as np
 from Genealogy import Genealogy
 from utils import draw_graphviz
-import matplotlib.pyplot as plt
 
 G = Genealogy.from_founders(families=5,
                             generations=5,
                             mean_offspring=2,
                             mean_out_of_family=1)
-T = G.sample_tree()
+T = G.sample_path()
 
 
 # relabel T

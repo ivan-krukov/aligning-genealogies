@@ -1,68 +1,40 @@
 import networkx as nx
+import numpy as np
 import pandas as pd
 
 
-def all_leaves_under_nodes(gg, nodes=None):
+def soft_ordering(total_edge_index, sim_scores):
 
-    if nodes is None:
-        nodes = list(gg.nodes())
+    df = pd.DataFrame(np.concatenate((total_edge_index, sim_scores.reshape(1, -1))).T,
+                      columns=['source', 'target', 'score'])
 
-    ntl = {}  # Nodes to leaves
+    df = df.sort_values(by=['source', 'score'], ascending=False)
 
-    for n in nodes:
+    target_order = {}
 
-        ntl[n] = set()
-        n_children = list(gg.successors(n))
+    for s in df['source'].unique():
+        sorted_targets = df.loc[df['source'] == s, 'target']
+        target_order[s] = list(sorted_targets)
 
-        if len(n_children) == 0:
-            ntl[n].add(n)
-        else:
-            while len(n_children) > 0:
-                nn, nn_children = n_children[0], list(gg.successors(n_children[0]))
-
-                if len(nn_children) > 0:
-                    n_children.extend(nn_children)
-                else:
-                    ntl[n].add(nn)
-
-                del n_children[0]
-
-    return ntl
+    return target_order
 
 
-def get_mrca(gg, pairs=None):
-    return nx.all_pairs_lowest_common_ancestor(gg, pairs)
+def greedy_matching(total_edge_index, sim_scores):
 
+    pred_pairs = []
 
-def convert_msprime_genealogy_to_nx(fname, directed=False):
+    while total_edge_index.shape[1] > 0:
+        pair_idx = np.argmax(sim_scores)
 
-    gen_df = pd.read_csv(fname, sep="\t",
-                         names=["ind_id", "father", "mother", "time"])
+        a, b = total_edge_index[:, pair_idx].flatten()
+        pred_pairs.append((a, b))
 
-    gg = [nx.Graph(), nx.DiGraph()][directed]
+        step_filt = (total_edge_index[0, :] != a) & (total_edge_index[1, :] != b)
 
-    # -------------------------------------------------------
-    # Add all nodes and edges to the graph:
-    gg.add_edges_from(zip(gen_df["father"], gen_df["ind_id"]))
-    gg.add_edges_from(zip(gen_df["mother"], gen_df["ind_id"]))
+        total_edge_index = total_edge_index[:, step_filt]
+        sim_scores = sim_scores[step_filt]
 
-    # -------------------------------------------------------
-    # Add node attributes:
-    nx.set_node_attributes(gg, dict(zip(gen_df['ind_id'], gen_df['time'])), 'time')
-
-    def infer_sex(node_id):
-        if node_id in gen_df['father']:
-            return 'M'
-        elif node_id in gen_df['mother']:
-            return 'F'
-        else:
-            return 'U'
-
-    gen_df['sex'] = gen_df['ind_id'].apply(infer_sex)
-
-    nx.set_node_attributes(gg, dict(zip(gen_df['ind_id'], gen_df['sex'])), 'sex')
-
-    return gg
+    return pred_pairs
 
 
 def draw_graphviz(G, labels=True, ax=None):
