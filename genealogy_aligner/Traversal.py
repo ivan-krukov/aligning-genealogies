@@ -22,7 +22,7 @@ class Traversal(Genealogical):
                     K[j,i] = K[i,j]
         return K
 
-    def to_coalescent_tree(self, add_common_ancestor=True, inplace=False):
+    def to_coalescent_tree(self, add_common_ancestors=True, inplace=False):
 
         if inplace:
             t_obj = self
@@ -52,8 +52,15 @@ class Traversal(Genealogical):
 
         tree_founders = t_obj.founders(use_time=False)
 
-        if len(tree_founders) > 1 and add_common_ancestor:
-            t_obj.add_edges_from([('CA', f) for f in tree_founders])
+        if add_common_ancestors:
+            ca_counter = 0
+            while len(tree_founders) > 1:
+                ca_counter -= 1
+                nodes_to_merge = np.random.choice(tree_founders, size=2, replace=False)
+                for n in nodes_to_merge:
+                    t_obj.add_edge(ca_counter, n)
+                    tree_founders = [f for f in tree_founders if f != n]
+                tree_founders.append(ca_counter)
 
         t_obj.remove_nodes_from(list(nx.isolates(t_obj)))
 
