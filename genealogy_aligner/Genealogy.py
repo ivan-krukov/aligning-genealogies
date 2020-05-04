@@ -1,6 +1,7 @@
 import networkx as nx
 from itertools import count
 import numpy as np
+import pandas as pd
 from numpy import random as rnd
 from Genealogical import Genealogical
 from Traversal import Traversal
@@ -12,32 +13,28 @@ class Genealogy(Genealogical):
         self.add_node(mat_id, time=time)
         self.add_node(pat_id, time=time)
 
-        
     def add_individual(self, ind_id, time):
         self.add_node(ind_id, time=time)
 
-        
     def add_child(self, child_id, mat_id, pat_id, time):
         self.add_node(child_id, time=time)
         self.add_edge(mat_id, child_id)
         self.add_edge(pat_id, child_id)
 
-    
     def parents(self, i):
         return list(self.predecessors(i))
-
 
     def kinship(self):
         """Compute the kinship matrix for the genealogy"""
         n = self.n_individuals        
-        K = np.zeros((n,n), dtype=float)
+        K = np.zeros((n, n), dtype=float)
         
         for i in range(n):
             if any(self.predecessors(i)):
                 p, q = self.predecessors(i)
                 K[i, i] = 0.5 + (K[p,q]/2)
             else:
-                K[i,i] = 0.5
+                K[i, i] = 0.5
             
             for j in range(i+1, n):
                 if any(self.predecessors(j)):
@@ -46,7 +43,40 @@ class Genealogy(Genealogical):
                     K[j,i] = K[i,j]
         return K
 
-        
+    @classmethod
+    def from_msprime_genealogy(cls, fname, filter_zeros=True):
+
+        gg = cls()
+
+        gen_df = pd.read_csv(fname, sep="\t",
+                             names=["ind_id", "father", "mother", "time"])
+
+        # Filter out entries with node 0:
+        if filter_zeros:
+            gen_df = gen_df[(gen_df.iloc[:, :-1] != 0).all(axis=1)]
+
+        # -------------------------------------------------------
+        # Add all nodes and edges to the graph:
+        gg.add_edges_from(zip(gen_df["father"], gen_df["ind_id"]))
+        gg.add_edges_from(zip(gen_df["mother"], gen_df["ind_id"]))
+
+        # -------------------------------------------------------
+        # Add node attributes:
+        nx.set_node_attributes(gg, dict(zip(gen_df['ind_id'], gen_df['time'])), 'time')
+
+        def infer_sex(node_id):
+            if node_id in gen_df['father']:
+                return 'M'
+            elif node_id in gen_df['mother']:
+                return 'F'
+            else:
+                return 'U'
+
+        gen_df['sex'] = gen_df['ind_id'].apply(infer_sex)
+
+        nx.set_node_attributes(gg, dict(zip(gen_df['ind_id'], gen_df['sex'])), 'sex')
+
+        return gg
 
     @classmethod
     def from_founders(cls, families, generations, mean_offspring=2, mean_out_of_family=2):
@@ -115,8 +145,7 @@ class Genealogy(Genealogical):
             # relabel
             return nx.convert_node_labels_to_integers(Gl, ordering='sorted')
 
-
-    def sample_tree(self):
+    def sample_path(self):
         """Sample a coalescent path from a genealogy
 
         Starting at the probands, randomly choose a parent.
@@ -138,7 +167,6 @@ class Genealogy(Genealogical):
                     T.add_node(parent, time=t)
                     T.add_edge(parent, individual)
                     prev_gen.add(parent)
-                
-                    
+
             current_gen = prev_gen
         return T

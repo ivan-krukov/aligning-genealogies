@@ -1,4 +1,5 @@
 import networkx as nx
+import numpy as np
 from Genealogy import Genealogy
 from utils import draw_graphviz
 import matplotlib.pyplot as plt
@@ -7,8 +8,8 @@ import numpy as np
 G = Genealogy.from_founders(families=3,
                             generations=3,
                             mean_offspring=2,
-                            mean_out_of_family=2)
-T = G.sample_tree()
+                            mean_out_of_family=1)
+T = G.sample_path()
 
 
 # relabel T
