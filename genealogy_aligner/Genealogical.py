@@ -4,15 +4,6 @@ from collections.abc import Iterable
 
 class Genealogical(nx.DiGraph):
 
-    # @classmethod
-    # def from_digraph(cls, D):
-    #     G = D.copy()
-    #     return G
-
-    @property
-    def generations(self):
-        return nx.dag_longest_path_length(self)
-    
     @property
     def n_individuals(self):
         return len(self.nodes)

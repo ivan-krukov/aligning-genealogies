@@ -50,6 +50,7 @@ class Genealogy(Genealogical):
 
         gen_df = pd.read_csv(fname, sep="\t",
                              names=["ind_id", "father", "mother", "time"])
+        gg.generations = gen_df['time'].max()
 
         # Filter out entries with node 0:
         if filter_zeros:
@@ -136,14 +137,17 @@ class Genealogy(Genealogical):
             current_gen = next_gen
             next_gen = []
 
-        if nx.is_weakly_connected(G):
-            return G
-        else:
+        if t != generations:
+            raise RuntimeError('Simulation terminated early')
+        
+        if not nx.is_weakly_connected(G):
             # if multiple subgraphs, return largest
             largest = max(nx.weakly_connected_components(G), key=len)
             Gl = nx.subgraph(G, largest)
             # relabel
-            return nx.convert_node_labels_to_integers(Gl, ordering='sorted')
+            G = nx.convert_node_labels_to_integers(Gl, ordering='sorted')
+        G.generations = generations
+        return G
 
     def sample_path(self):
         """Sample a coalescent path from a genealogy
@@ -156,6 +160,7 @@ class Genealogy(Genealogical):
         A `Traversal` object"""
         current_gen = set(self.probands())
         T = Traversal()
+        T.generations = self.generations
         T.add_nodes_from(current_gen, time=self.generations)
         
         for t in reversed(range(self.generations)):
