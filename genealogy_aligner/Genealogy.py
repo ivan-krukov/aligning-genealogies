@@ -1,7 +1,6 @@
 import networkx as nx
 from itertools import count
 import numpy as np
-import pandas as pd
 from numpy import random as rnd
 from Genealogical import Genealogical
 from Traversal import Traversal
@@ -46,6 +45,7 @@ class Genealogy(Genealogical):
     @classmethod
     def from_msprime_genealogy(cls, fname, filter_zeros=True):
 
+        import pandas as pd
         gg = cls()
 
         gen_df = pd.read_csv(fname, sep="\t",

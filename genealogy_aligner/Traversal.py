@@ -8,18 +8,20 @@ class Traversal(Genealogical):
     def __init__(self):
         super().__init__()
         
-    def similarity(self):
+    def similarity(self, G):
         # A kinship-like distance function
-        n = self.n_individuals        
+        n = G.n_individuals
         K = np.zeros((n,n), dtype=float)
         
         for i in range(n):
-            K[i,i] = 0.5
-            for j in range(i+1, n):
-                if any(self.predecessors(j)):
-                    p = next(self.predecessors(j))
-                    K[i,j] = (K[i,p]/2)
-                    K[j,i] = K[i,j]
+            if i in self:
+                K[i,i] = 0.5
+                for j in range(i+1, n):
+                    if j in self:
+                        if any(self.predecessors(j)):
+                            p = next(self.predecessors(j))
+                            K[i,j] = (K[i,p]/2)
+                            K[j,i] = K[i,j]
         return K
 
     def to_coalescent_tree(self, add_common_ancestors=True, inplace=False):
@@ -43,9 +45,11 @@ class Traversal(Genealogical):
                 pred_n = pred_n[0]
                 if pred_n not in non_coalesc_nodes:
                     k = n
+                    edge_weight = 1
                     while k in non_coalesc_nodes:
                         k = list(t_obj.successors(k))[0]
-                    edges_to_add.append((pred_n, k))
+                        edge_weight += 1
+                    edges_to_add.append((pred_n, k, dict(dist=edge_weight)))
 
         t_obj.add_edges_from(edges_to_add)
         t_obj.remove_nodes_from(non_coalesc_nodes)
