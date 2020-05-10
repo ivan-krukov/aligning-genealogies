@@ -13,7 +13,7 @@ T = G.sample_path()
 
 
 # relabel T
-S = nx.convert_node_labels_to_integers(T, ordering='sorted')
+S = nx.convert_node_labels_to_integers(T.graph, ordering='sorted')
 TS_mapping = dict(zip(T.nodes, S.nodes))
 ST_mapping = dict(zip(S.nodes, T.nodes))
 

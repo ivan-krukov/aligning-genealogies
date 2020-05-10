@@ -19,13 +19,13 @@ fig.savefig('fig/coal_example_genealogy.png')
 pairs = combinations(G.probands(), 2)
 
 # find a set of common ancestors
-ancestral_trios = list(nx.all_pairs_lowest_common_ancestor(nx.DiGraph(G), pairs))
+ancestral_trios = list(nx.all_pairs_lowest_common_ancestor(nx.DiGraph(G.graph), pairs))
 
 # find the most common common ancestor
 important_ancestor = Counter(x[1] for x in ancestral_trios).most_common()[0][0]
 
 # plot
-T = nx.dfs_tree(G, important_ancestor)
+T = nx.dfs_tree(G.graph, important_ancestor)
 fig, ax = plt.subplots(dpi=300, figsize=(10,5))
 draw_graphviz(T, ax)
 fig.savefig('fig/coal_example_tree.png')

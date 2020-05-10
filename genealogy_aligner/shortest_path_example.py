@@ -8,7 +8,7 @@ from collections import Counter
 
 
 G = Genealogy.from_founders(5, 5, 2.5)
-U = G.to_undirected()
+U = G.graph.to_undirected()
 
 
 start = time.perf_counter()
