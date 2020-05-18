@@ -1,3 +1,3 @@
-from .Genealogy import Genealogy
+from .Pedigree import Pedigree
 
-__all__ = ['Genealogy']
+__all__ = ['Pedigree']

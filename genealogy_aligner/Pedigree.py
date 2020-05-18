@@ -1,5 +1,7 @@
 import networkx as nx
+import msprime as msp
 from itertools import count
+import io
 import numpy as np
 from numpy import random as rnd
 from Genealogical import Genealogical
@@ -149,6 +151,38 @@ class Pedigree(Genealogical):
         ped.generations = generations
 
         return ped
+
+    def to_msprime_pedigree(self, f_name=None, add_header=True):
+
+        txt = ""
+
+        if add_header:
+            txt += "\t".join(["Individual ID", "Father ID", "Mother ID"]) + "\n"
+
+        for n in self.nodes:
+            p = self.predecessors(n)
+            if p:
+                txt += "\t".join(map(str, [n + 1, p[0] + 1, p[1] + 1])) + "\n"
+            else:
+                txt += "\t".join(map(str, [n + 1, 0, 0])) + "\n"
+
+        if f_name is None:
+            return txt
+        else:
+            with open(f_name, 'w') as out:
+                out.write(txt)
+
+    def generate_msprime_simulations(self):
+
+        msp_ped = msp.Pedigree.read_txt(
+            io.StringIO(
+                self.to_msprime_pedigree()
+            )
+        )
+
+        return msp.simulate(len(self.probands()),
+                            model='wf_ped',
+                            pedigree=msp_ped)
 
     def sample_path(self):
         """Sample a coalescent path from a genealogy
