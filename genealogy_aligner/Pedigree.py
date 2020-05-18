@@ -152,12 +152,9 @@ class Pedigree(Genealogical):
 
         return ped
 
-    def to_msprime_pedigree(self, f_name=None, add_header=True):
+    def to_msprime_pedigree(self):
 
         txt = ""
-
-        if add_header:
-            txt += "\t".join(["Individual ID", "Father ID", "Mother ID"]) + "\n"
 
         for n in self.nodes:
             p = self.predecessors(n)
@@ -166,33 +163,28 @@ class Pedigree(Genealogical):
             else:
                 txt += "\t".join(map(str, [n + 1, 0, 0])) + "\n"
 
-        if f_name is None:
-            return txt
-        else:
-            with open(f_name, 'w') as out:
-                out.write(txt)
+        return msp.Pedigree.read_txt(
+            io.StringIO(txt)
+        )
 
     def generate_msprime_simulations(self):
 
-        msp_ped = msp.Pedigree.read_txt(
-            io.StringIO(
-                self.to_msprime_pedigree()
-            )
-        )
-
         return msp.simulate(len(self.probands()),
                             model='wf_ped',
-                            pedigree=msp_ped)
+                            pedigree=self.to_msprime_pedigree())
 
     def sample_path(self):
-        """Sample a coalescent path from a genealogy
+        """
+        Sample a coalescent path from a genealogy
 
         Starting at the probands, randomly choose a parent.
         Stop once founder individuals (t=0) are reached
 
         Returns:
         --------
-        A `Traversal` object"""
+        A `Traversal` object
+        """
+
         current_gen = set(self.probands())
         T = Traversal()
         T.generations = self.generations

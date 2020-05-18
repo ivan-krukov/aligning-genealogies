@@ -5,7 +5,7 @@ import numpy as np
 
 class Aligner(object):
 
-    def __init__(self, ped, ts, aligned_pairs=None):
+    def __init__(self, ped, ts, aligned_nodes=None):
         """
 
         :param ped: A pedigree
@@ -16,26 +16,32 @@ class Aligner(object):
 
         self.ped = ped
         self.ts = ts
-        if aligned_pairs is None:
-            self.aligned_pairs = [(n_ts, n_ped)
-                                  for n_ped in ped.nodes
-                                  for n_ts in ts.nodes
-                                  if n_ped == n_ts]
-        else:
-            self.aligned_pairs = aligned_pairs
 
-        self.pred_pairs = None
+        if aligned_nodes is None:
+            self.true_ts_node_to_ped_node = [
+                (n_ts, n_ped)
+                for n_ped in ped.nodes
+                for n_ts in ts.nodes
+                if n_ped == n_ts
+            ]
+        else:
+            self.true_ts_node_to_ped_node = aligned_nodes
+
+        self.true_ped_node_to_ts_edge = ts.ts_edges_to_ped_nodes
+
+        self.pred_ts_node_to_ped_node = None
+        self.pred_ped_node_to_ts_edge = None
 
     def align(self):
         raise NotImplementedError
 
     def evaluate(self):
 
-        if self.pred_pairs is None:
+        if self.pred_ts_node_to_ped_node is None:
             raise Exception("No pairs are predicted to be aligned. Call `align` first.")
 
         metrics = {
-            'accuracy': accuracy(self.aligned_pairs, self.pred_pairs)
+            'accuracy': accuracy(self.aligned_pairs, self.pred_ts_node_to_ped_node)
         }
 
         return metrics
@@ -74,4 +80,6 @@ class DescMatchingAligner(Aligner):
                 pairs += [[n_ts, n_ped]]
                 scores.append(score)
 
-        self.pred_pairs = greedy_matching(np.array(pairs).T, np.array(scores))
+        self.pred_ts_node_to_ped_node = greedy_matching(np.array(pairs).T, np.array(scores))
+
+        return self.pred_ts_node_to_ped_node

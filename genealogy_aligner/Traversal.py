@@ -8,6 +8,7 @@ class Traversal(Genealogical):
 
     def __init__(self):
         super().__init__()
+        self.ts_edges_to_ped_nodes = {}
         
     def similarity(self, G):
         # A kinship-like distance function
@@ -27,10 +28,7 @@ class Traversal(Genealogical):
 
     def to_coalescent_tree(self, add_common_ancestors=True, inplace=False):
 
-        if inplace:
-            t_obj = self
-        else:
-            t_obj = copy.deepcopy(self)
+        t_obj = copy.deepcopy(self)
 
         non_coalesc_nodes = t_obj.filter_nodes(
                 lambda node, data: len(t_obj.successors(node)) == 1
@@ -40,17 +38,21 @@ class Traversal(Genealogical):
 
         for n in non_coalesc_nodes:
 
-            pred_n = list(t_obj.predecessors(n))
+            pred_n = t_obj.predecessors(n)
 
             if len(pred_n) > 0:
                 pred_n = pred_n[0]
                 if pred_n not in non_coalesc_nodes:
                     k = n
                     edge_weight = 1
+                    ped_nodes = []
                     while k in non_coalesc_nodes:
+                        ped_nodes.append(k)
                         k = t_obj.successors(k)[0]
                         edge_weight += 1
+
                     edges_to_add.append((pred_n, k, dict(dist=edge_weight)))
+                    t_obj.ts_edges_to_ped_nodes[(pred_n, k)] = ped_nodes
 
         t_obj.graph.add_edges_from(edges_to_add)
         t_obj.graph.remove_nodes_from(non_coalesc_nodes)
@@ -63,13 +65,28 @@ class Traversal(Genealogical):
                 ca_counter -= 1
                 nodes_to_merge = np.random.choice(tree_founders, size=2, replace=False)
                 for n in nodes_to_merge:
+
                     t_obj.graph.add_edge(ca_counter, n)
+
+                    if n >= 0 and n not in self.founders():
+
+                        k = self.predecessors(n)[0]
+                        ped_nodes = [k]
+
+                        while k not in self.founders():
+                            k = self.predecessors(k)[0]
+                            ped_nodes.append(k)
+
+                        t_obj.ts_edges_to_ped_nodes[(ca_counter, n)] = ped_nodes
+
                     tree_founders = [f for f in tree_founders if f != n]
                 tree_founders.append(ca_counter)
 
         t_obj.graph.remove_nodes_from(list(nx.isolates(t_obj.graph)))
 
-        if not inplace:
+        if inplace:
+            self = t_obj
+        else:
             return t_obj
 
     def draw(self, labels=True, ax=None, **kwargs):

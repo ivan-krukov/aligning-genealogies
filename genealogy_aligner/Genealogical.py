@@ -12,6 +12,10 @@ class Genealogical(object):
         return len(self.nodes)
 
     @property
+    def edges(self):
+        return list(self.graph.edges())
+
+    @property
     def nodes(self):
         return list(self.graph.nodes())
 
