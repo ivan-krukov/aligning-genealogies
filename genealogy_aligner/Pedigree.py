@@ -3,6 +3,7 @@ import msprime as msp
 from itertools import count
 import io
 import numpy as np
+import pandas as pd
 from numpy import random as rnd
 from Genealogical import Genealogical
 from Traversal import Traversal
@@ -45,13 +46,16 @@ class Pedigree(Genealogical):
         return K
 
     @classmethod
-    def from_msprime_pedigree(cls, fname, filter_zeros=True):
+    def from_msprime_pedigree(cls, fname, header=False, filter_zeros=True):
 
-        import pandas as pd
         ped = cls()
 
-        gen_df = pd.read_csv(fname, sep="\t",
-                             names=["ind_id", "father", "mother", "time"])
+        if header:
+            gen_df = pd.read_csv(fname, sep="\t")
+        else:
+            gen_df = pd.read_csv(fname, sep="\t",
+                                 names=["ind_id", "father", "mother", "time"])
+
         ped.generations = gen_df['time'].max()
 
         # Filter out entries with node 0:
@@ -109,12 +113,12 @@ class Pedigree(Genealogical):
         current_gen = []
         next_gen = []
         # insert founder families
-        for f in range(families):
-            mat_id, pat_id = 2*f, 2*f+1
+        for f in range(1, 2*(families + 1), 2):
+            mat_id, pat_id = f, f+1
             ped.add_couple(mat_id, pat_id, 0)
             current_gen.extend([mat_id, pat_id])
 
-        id_counter = count(families*2)
+        id_counter = count(1 + 2*families)
 
         for t in range(1, generations+1):
             # if one individual is left, it produces no offspring
@@ -147,31 +151,67 @@ class Pedigree(Genealogical):
             largest = max(nx.weakly_connected_components(ped.graph), key=len)
             Gl = nx.subgraph(ped.graph, largest)
             # relabel
-            ped.graph = nx.convert_node_labels_to_integers(Gl, ordering='sorted')
+            ped.graph = nx.convert_node_labels_to_integers(Gl,
+                                                           ordering='sorted',
+                                                           first_label=1)
+
         ped.generations = generations
 
         return ped
 
-    def to_msprime_pedigree(self):
+    def to_msprime_pedigree(self, f_name=None, header=False):
 
-        txt = ""
+        ped_df = []
+        node_time = self.get_node_attributes('time')
 
         for n in self.nodes:
             p = self.predecessors(n)
             if p:
-                txt += "\t".join(map(str, [n + 1, p[0] + 1, p[1] + 1])) + "\n"
+                ped_df.append([n, p[0], p[1], node_time[n]])
             else:
-                txt += "\t".join(map(str, [n + 1, 0, 0])) + "\n"
+                ped_df.append([n, 0, 0, node_time[n]])
 
-        return msp.Pedigree.read_txt(
-            io.StringIO(txt)
+        ped_df = pd.DataFrame(ped_df,
+                              columns=["ind_id", "father", "mother", "time"])
+
+        if f_name is None:
+
+            sio = io.StringIO()
+            ped_df.to_csv(sio, sep="\t", index=False)
+            sio.seek(0)
+            msp_ped = msp.Pedigree.read_txt(sio, time_col=3)
+
+            msp_ped.set_samples(sample_IDs=self.probands())
+
+            return msp_ped
+        else:
+            ped_df.to_csv(f_name, index=False, header=header, sep="\t")
+
+    def generate_msprime_simulations(self,
+                                     Ne=100,
+                                     model='wf_ped',
+                                     mu=1e-8,
+                                     length=1e6,
+                                     rho=1e-8):
+
+        rm = msp.RecombinationMap(
+            [0, int(length)],
+            [rho, 0],
+            discrete=True
         )
 
-    def generate_msprime_simulations(self):
+        des = [
+            msp.SimulationModelChange(self.generations, model)
+        ]
 
         return msp.simulate(len(self.probands()),
-                            model='wf_ped',
-                            pedigree=self.to_msprime_pedigree())
+                            Ne=Ne,
+                            pedigree=self.to_msprime_pedigree(),
+                            model=model,
+                            mutation_rate=mu,
+                            recombination_map=rm,
+                            end_time=self.generations,
+                            demographic_events=des)
 
     def sample_path(self):
         """

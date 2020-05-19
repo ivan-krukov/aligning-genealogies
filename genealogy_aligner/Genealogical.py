@@ -62,8 +62,14 @@ class Genealogical(object):
                 node_list.append(node)
         return node_list
 
-    def node_attribute(self, attribute):
-        return (node[1][attribute] for node in self.graph.nodes(data=True))
+    def get_node_attributes(self, attr, node=None):
+
+        node_attr = nx.get_node_attributes(self.graph, attr)
+
+        if node is None:
+            return node_attr
+        else:
+            return node_attr[node]
 
     def get_individuals_at_generation(self, k):
         return self.filter_nodes(lambda node, data: data['time'] == k)
@@ -77,11 +83,17 @@ class Genealogical(object):
             lambda node, data: len(self.predecessors(node)) == 0
         )
 
-    def probands(self):
+    def probands(self, use_time=True):
         """Get a list of individuals at present day"""
-        return self.filter_nodes(
-            lambda node, data: len(self.successors(node)) == 0
-        )
+        if use_time:
+            node_times = self.get_node_attributes('time')
+            max_time = max(node_times.values())
+
+            return [n for n, t in node_times.items() if t == max_time]
+        else:
+            return self.filter_nodes(
+                lambda node, data: len(self.successors(node)) == 0
+            )
 
     def get_probands_under(self, nodes=None, climb_up_step=0):
 
