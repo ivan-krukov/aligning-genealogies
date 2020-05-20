@@ -204,8 +204,8 @@ class Pedigree(Genealogical):
         """
         Sample a coalescent path from a genealogy
 
-        Starting at the probands, randomly choose a parent.
-        Stop once founder individuals (t=0) are reached
+        Starting at the probands (t=0), randomly choose a parent.
+        Stop once founder individuals (t=max) are reached
 
         Returns:
         --------

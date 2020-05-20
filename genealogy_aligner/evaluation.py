@@ -1,6 +1,5 @@
-from utils import greedy_matching, soft_ordering
 import numpy as np
-
+from .utils import greedy_matching, soft_ordering
 
 def accuracy(pos_anchors, pred_anchors):
     """
