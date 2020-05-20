@@ -58,10 +58,6 @@ class Pedigree(Genealogical):
 
         ped.generations = gen_df['time'].max()
 
-        # Filter out entries with node 0:
-        if filter_zeros:
-            gen_df = gen_df[(gen_df.iloc[:, :-1] != 0).all(axis=1)]
-
         # -------------------------------------------------------
         # Add all nodes and edges to the graph:
         ped.graph.add_edges_from(zip(gen_df["father"], gen_df["ind_id"]))
@@ -82,6 +78,9 @@ class Pedigree(Genealogical):
         gen_df['sex'] = gen_df['ind_id'].apply(infer_sex)
 
         nx.set_node_attributes(ped.graph, dict(zip(gen_df['ind_id'], gen_df['sex'])), 'sex')
+
+        if filter_zeros:
+            ped.graph.remove_node(0)
 
         return ped
 
@@ -115,12 +114,12 @@ class Pedigree(Genealogical):
         # insert founder families
         for f in range(1, 2*(families + 1), 2):
             mat_id, pat_id = f, f+1
-            ped.add_couple(mat_id, pat_id, 0)
+            ped.add_couple(mat_id, pat_id, generations)
             current_gen.extend([mat_id, pat_id])
 
         id_counter = count(1 + 2*families)
 
-        for t in range(1, generations+1):
+        for t in range(generations - 1, -1, -1):
             # if one individual is left, it produces no offspring
             while len(current_gen) >= 2:
                 mat_id, pat_id = rnd.choice(current_gen, 2, replace=False)
@@ -143,7 +142,7 @@ class Pedigree(Genealogical):
             current_gen = next_gen
             next_gen = []
 
-        if t != generations:
+        if t != 0:
             raise RuntimeError('Simulation terminated early')
         
         if not nx.is_weakly_connected(ped.graph):
@@ -166,8 +165,10 @@ class Pedigree(Genealogical):
 
         for n in self.nodes:
             p = self.predecessors(n)
-            if p:
+            if len(p) == 2:
                 ped_df.append([n, p[0], p[1], node_time[n]])
+            elif len(p) == 1:
+                ped_df.append([n, p[0], 0, node_time[n]])
             else:
                 ped_df.append([n, 0, 0, node_time[n]])
 
@@ -228,9 +229,9 @@ class Pedigree(Genealogical):
         current_gen = set(self.probands())
         T = Traversal()
         T.generations = self.generations
-        T.graph.add_nodes_from(current_gen, time=self.generations)
+        T.graph.add_nodes_from(current_gen, time=0)
         
-        for t in reversed(range(self.generations)):
+        for t in range(1, self.generations + 1):
             prev_gen = set()
             for individual in current_gen:
                 parents = self.predecessors(individual)
