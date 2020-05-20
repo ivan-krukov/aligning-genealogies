@@ -1,4 +1,5 @@
 import networkx as nx
+import numpy as np
 from collections.abc import Iterable
 
 
@@ -71,28 +72,40 @@ class Genealogical(object):
         else:
             return node_attr[node]
 
+
+    def attribute_array(self, nodes, attr):
+        """Return a sorted array of attributes for the given nodes"""
+        attr_dict = nx.get_node_attributes(self.graph, attr)
+        return np.array([attr_dict[n] for n in nodes])
+
+
     def get_individuals_at_generation(self, k):
         return self.filter_nodes(lambda node, data: data['time'] == k)
 
-    def founders(self):
+    
+    def founders(self, use_time=False):
         """
         Get a list of nodes that don't have predecessors
         :return:
         """
-        return self.filter_nodes(
-            lambda node, data: len(self.predecessors(node)) == 0
-        )
+        if use_time:
+            return self.filter_nodes(
+                lambda node, data: data['time'] == self.generations
+            )
+        else:
+            return self.filter_nodes(
+                lambda node, data: len(list(self.graph.predecessors(node))) == 0
+            )
 
     def probands(self, use_time=True):
         """Get a list of individuals at present day"""
         if use_time:
-            node_times = self.get_node_attributes('time')
-            max_time = max(node_times.values())
-
-            return [n for n, t in node_times.items() if t == max_time]
+            return self.filter_nodes(
+                lambda node, data: data['time'] == 0
+            )
         else:
             return self.filter_nodes(
-                lambda node, data: len(self.successors(node)) == 0
+                lambda node, data: len(list(self.graph.successors(node))) == 0
             )
 
     def get_probands_under(self, nodes=None, climb_up_step=0):
