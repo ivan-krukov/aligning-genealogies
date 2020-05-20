@@ -4,6 +4,7 @@ import copy
 
 from .Genealogical import Genealogical
 
+
 class Traversal(Genealogical):
 
     def __init__(self):
@@ -83,6 +84,11 @@ class Traversal(Genealogical):
                 tree_founders.append(ca_counter)
 
         t_obj.graph.remove_nodes_from(list(nx.isolates(t_obj.graph)))
+
+        # Set the time attribute for out-of-pedigree nodes to inf for now:
+        nx.set_node_attributes(t_obj.graph,
+                               {ind: np.inf for ind in t_obj.nodes if int(ind) < 0},
+                               'time')
 
         if inplace:
             self = t_obj

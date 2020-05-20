@@ -41,7 +41,8 @@ class Aligner(object):
             raise Exception("No pairs are predicted to be aligned. Call `align` first.")
 
         metrics = {
-            'accuracy': accuracy(self.aligned_pairs, self.pred_ts_node_to_ped_node)
+            'accuracy': accuracy(self.true_ts_node_to_ped_node,
+                                 self.pred_ts_node_to_ped_node)
         }
 
         return metrics

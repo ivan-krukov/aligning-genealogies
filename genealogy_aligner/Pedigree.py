@@ -27,7 +27,6 @@ class Pedigree(Genealogical):
     def parents(self, node):
         return self.predecessors(node)
 
-
     @classmethod
     def from_msprime_pedigree(cls, fname, header=False, filter_zeros=True):
 
@@ -68,91 +67,47 @@ class Pedigree(Genealogical):
 
         return ped
 
-    @staticmethod
-    def infer_time(ind_id, mat_id, pat_id):
-        n = len(ind_id)
-        assert n == len(mat_id)
-        assert n == len(pat_id)
+    def to_table(self, f_name=None, header=False):
 
-        depth = np.zeros(n, dtype=int)
-        if n == 1:
-            return depth
-
-        parents = ind_id[(mat_id == 0) & (pat_id == 0)]
-
-        for i in np.arange(1, n+1):
-            # all the individuals whose parents are founders
-            children = np.isin(mat_id, parents) | np.isin(pat_id, parents)
-            if i == n:
-                raise RuntimeError("Impossible pedigree - someone is their own ancestor")
-            if np.any(children):
-                depth[children] = i
-                parents = ind_id[children]
-            else: 
-                break
-
-        # flip!
-        return np.abs(depth - max(depth))
-    
-
-    @classmethod
-    def read_balsac(cls, fname):
-        balsac_columns = ['ind', 'father', 'mother', 'sex']
-        ped = cls()
-        ped_df = pd.read_csv(fname, sep="\t")
-        if ped_df.columns.tolist() != balsac_columns:
-            raise RuntimeError("Unexpected column headers - required format" + str(balsac_columns))
+        node_time = self.get_node_attributes('time')
+        ped_df = []
         
-        time = Pedigree.infer_time(ped_df['ind'], ped_df['mother'], ped_df['father'])
-        ped.generations = max(time)
-
-        for i, row in ped_df.iterrows():
-            ind, pat_id, mat_id, sex = row
-            if pat_id == mat_id == 0:
-                ped.add_individual(ind, time[i])
+        for i, n in enumerate(self.nodes):
+            p = self.predecessors(n)
+            if len(p) == 2:
+                ped_df.append([n, p[0], p[1], node_time[n]])
+            elif len(p) == 1:
+                ped_df.append([n, p[0], 0, node_time[n]])
             else:
-                ped.add_child(ind, pat_id, mat_id, time[i])
+                ped_df.append([n, 0, 0, node_time[n]])
 
-        return ped
+        ped_df = pd.DataFrame(ped_df,
+                              columns=['individual', 'father', 'mother', 'time'])
 
-    def to_table(self):
-        individual = np.array(self.graph.nodes)
-        time = self.attribute_array(individual, 'time')
-        parents = np.zeros((len(individual), 2))
-        father = np.zeros_like(individual)
-        mother = np.zeros_like(individual)
-        
-        for i, node in enumerate(self.graph.nodes):
-            pred = list(self.graph.predecessors(node))
-            if pred:
-                father[i] = pred[0]
-                mother[i] = pred[1]
-        tbl = np.vstack((individual, father, mother, time)).transpose()
-
-        return pd.DataFrame(tbl, columns=['individual', 'father', 'mother', 'time'])
-
+        if f_name is None:
+            return ped_df
+        else:
+            ped_df.to_csv(f_name, sep="\t", header=header, index=False)
 
     def to_msprime_pedigree(self):
+
         tbl = self.to_table()
+
         individual = tbl.individual.values
         parent_IDs = np.vstack((tbl.father, tbl.mother)).transpose()
         parent_idx = msp.Pedigree.parent_ID_to_index(individual, parent_IDs)
         
         msp_ped = msp.Pedigree(individual, parent_idx, tbl.time.values)
+        msp_ped.set_samples(sample_IDs=self.probands(), probands_only=True)
+
         return msp_ped
-        
-        
+
     def generate_msprime_simulations(self,
-                                     probands,
-                                     complete=False,
                                      Ne=100,
                                      model_after='dtwf',
                                      mu=1e-8,
                                      length=1e6,
                                      rho=1e-8):
-
-        msp_ped = self.to_msprime_pedigree()
-        msp_ped.set_samples(sample_IDs=probands, probands_only=True)
 
         rm = msp.RecombinationMap(
             [0, int(length)],
@@ -160,13 +115,13 @@ class Pedigree(Genealogical):
             discrete=True
         )
 
-        des = []
-        if complete:
-            des.append(msp.SimulationModelChange(self.generations, model_after))
+        des = [
+            msp.SimulationModelChange(self.generations, model_after)
+        ]
 
-        return msp.simulate(sample_size=len(probands),
+        return msp.simulate(len(self.probands()),
                             Ne=Ne,
-                            pedigree=msp_ped,
+                            pedigree=self.to_msprime_pedigree(),
                             model='wf_ped',
                             mutation_rate=mu,
                             recombination_map=rm,
@@ -249,7 +204,6 @@ class Pedigree(Genealogical):
             ped.graph = nx.subgraph(ped.graph, largest)
 
         return ped
-
     
     def sample_path(self):
         """
@@ -264,17 +218,19 @@ class Pedigree(Genealogical):
         """
 
         current_gen = set(self.probands())
+        node_time = self.get_node_attributes('time')
+
         T = Traversal()
         T.generations = self.generations
-        T.graph.add_nodes_from(current_gen, time=self.generations)
+        T.graph.add_nodes_from(current_gen, time=0)
         
-        for t in range(self.generations):
+        for _ in range(self.generations):
             prev_gen = set()
             for individual in current_gen:
                 parents = self.predecessors(individual)
                 if parents:
                     parent = rnd.choice(parents)
-                    T.graph.add_node(parent, time=t)
+                    T.graph.add_node(parent, time=node_time[parent])
                     T.graph.add_edge(parent, individual)
                     prev_gen.add(parent)
 

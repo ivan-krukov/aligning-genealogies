@@ -89,10 +89,7 @@ class Genealogical(object):
     def probands(self, use_time=True):
         """Get a list of individuals at present day"""
         if use_time:
-            node_times = self.get_node_attributes('time')
-            max_time = max(node_times.values())
-
-            return [n for n, t in node_times.items() if t == max_time]
+            return self.get_individuals_at_generation(0)
         else:
             return self.filter_nodes(
                 lambda node, data: len(self.successors(node)) == 0
@@ -111,7 +108,7 @@ class Genealogical(object):
 
             ntp[n] = set()
 
-            base_set = self.predecessors(n, climb_up_step, include_self=True)
+            base_set = self.predecessors(n, climb_up_step, include_founders=True)
             n_set = []
             for ns in base_set:
                 n_set += self.successors(ns)
