@@ -1,2 +1,4 @@
+.DS_Store
 /cached/
-/genealogy_aligner/__pycache__/
+**/__pycache__/
+poetry.lock

@@ -1,12 +1,13 @@
 import networkx as nx
 import msprime as msp
 from itertools import count
-import io
+
 import numpy as np
 import pandas as pd
 from numpy import random as rnd
-from Genealogical import Genealogical
-from Traversal import Traversal
+
+from .Genealogical import Genealogical
+from .Traversal import Traversal
 
 
 class Pedigree(Genealogical):

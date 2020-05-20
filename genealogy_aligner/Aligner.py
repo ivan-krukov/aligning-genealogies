@@ -1,6 +1,6 @@
-from evaluation import accuracy
-from utils import greedy_matching
 import numpy as np
+from .evaluation import accuracy
+from .utils import greedy_matching
 
 
 class Aligner(object):
