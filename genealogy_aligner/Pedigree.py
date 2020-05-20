@@ -27,6 +27,54 @@ class Pedigree(Genealogical):
     def parents(self, node):
         return self.predecessors(node)
 
+    @staticmethod
+    def infer_time(ind_id, mat_id, pat_id):
+        n = len(ind_id)
+        assert n == len(mat_id)
+        assert n == len(pat_id)
+
+        depth = np.zeros(n, dtype=int)
+        if n == 1:
+            return depth
+
+        parents = ind_id[(mat_id == 0) & (pat_id == 0)]
+
+        for i in np.arange(1, n+1):
+            # all the individuals whose parents are founders
+            children = np.isin(mat_id, parents) | np.isin(pat_id, parents)
+            if i == n:
+                raise RuntimeError("Impossible pedigree - someone is their own ancestor")
+            if np.any(children):
+                depth[children] = i
+                parents = ind_id[children]
+            else:
+                break
+
+        # flip!
+        return np.abs(depth - max(depth))
+
+    @classmethod
+    def read_balsac(cls, fname):
+        balsac_columns = ['ind', 'father', 'mother', 'sex']
+
+        ped = cls()
+        ped_df = pd.read_csv(fname, sep="\t")
+
+        if ped_df.columns.tolist() != balsac_columns:
+            raise RuntimeError("Unexpected column headers - required format" + str(balsac_columns))
+
+        time = Pedigree.infer_time(ped_df['ind'], ped_df['mother'], ped_df['father'])
+        ped.generations = max(time)
+
+        for i, row in ped_df.iterrows():
+            ind, pat_id, mat_id, sex = row
+            if pat_id == mat_id == 0:
+                ped.add_individual(ind, time[i])
+            else:
+                ped.add_child(ind, pat_id, mat_id, time[i])
+
+        return ped
+
     @classmethod
     def from_msprime_pedigree(cls, fname, header=False, filter_zeros=True):
 
