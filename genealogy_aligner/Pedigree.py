@@ -1,12 +1,13 @@
 import networkx as nx
 import msprime as msp
 from itertools import count
-import io
+
 import numpy as np
 import pandas as pd
 from numpy import random as rnd
-from Genealogical import Genealogical
-from Traversal import Traversal
+
+from .Genealogical import Genealogical
+from .Traversal import Traversal
 
 
 class Pedigree(Genealogical):
@@ -26,24 +27,6 @@ class Pedigree(Genealogical):
     def parents(self, node):
         return self.predecessors(node)
 
-    def kinship(self):
-        """Compute the kinship matrix for the genealogy"""
-        n = self.n_individuals        
-        K = np.zeros((n, n), dtype=float)
-        
-        for i in range(n):
-            if any(self.predecessors(i)):
-                p, q = self.predecessors(i)
-                K[i, i] = 0.5 + (K[p,q]/2)
-            else:
-                K[i, i] = 0.5
-            
-            for j in range(i+1, n):
-                if any(self.predecessors(j)):
-                    p, q = self.predecessors(j)
-                    K[i,j] = (K[i,p]/2) + (K[i,q]/2)
-                    K[j,i] = K[i,j]
-        return K
 
     @classmethod
     def from_msprime_pedigree(cls, fname, header=False, filter_zeros=True):
@@ -57,6 +40,10 @@ class Pedigree(Genealogical):
                                  names=["ind_id", "father", "mother", "time"])
 
         ped.generations = gen_df['time'].max()
+
+        # Filter out entries with node 0:
+        if filter_zeros:
+            gen_df = gen_df[(gen_df.iloc[:, :-1] != 0).all(axis=1)]
 
         # -------------------------------------------------------
         # Add all nodes and edges to the graph:
@@ -79,118 +66,39 @@ class Pedigree(Genealogical):
 
         nx.set_node_attributes(ped.graph, dict(zip(gen_df['ind_id'], gen_df['sex'])), 'sex')
 
-        if filter_zeros:
-            ped.graph.remove_node(0)
-
         return ped
 
-    @classmethod
-    def from_founders(cls, families, generations, mean_offspring=2, mean_out_of_family=2):
-        """Simulate a genealogy forward in time, starting with `families` starting families
-
-        Parameters
-        ----------
-        families: int
-            Number of couples starting the population
-        generations: int
-            Number of generations to simulate
-        mean_offspring: float
-            Average number of children per family, mean of Poisson RV
-        mean_out_of_family: float
-            Average number of out-of family individuals added each generation
-        Returns
-        -------
-        nx.Graph
-            networkx.Graph of relationships.
-            Each node carries:
-            time: int      - generation
-            x: int         - index (out of N), for plotting
-            parents: [int] - list of parent IDs - redundant - used for testing
-        """
-        ped = cls()
-
-        current_gen = []
-        next_gen = []
-        # insert founder families
-        for f in range(1, 2*(families + 1), 2):
-            mat_id, pat_id = f, f+1
-            ped.add_couple(mat_id, pat_id, generations)
-            current_gen.extend([mat_id, pat_id])
-
-        id_counter = count(1 + 2*families)
-
-        for t in range(generations - 1, -1, -1):
-            # if one individual is left, it produces no offspring
-            while len(current_gen) >= 2:
-                mat_id, pat_id = rnd.choice(current_gen, 2, replace=False)
-                current_gen.remove(mat_id)
-                current_gen.remove(pat_id)
-                children = rnd.poisson(mean_offspring)
-
-                for ch in range(children):
-                    child_id = next(id_counter)
-                    next_gen.append(child_id)
-                    ped.add_child(child_id, mat_id, pat_id, t)
-
-            # add extra out-of-family individuals
-            new_arrivals = rnd.poisson(mean_out_of_family)
-            for ind in range(new_arrivals):
-                ind_id = next(id_counter)
-                next_gen.append(ind_id)
-                ped.add_individual(ind_id, t)
-
-            current_gen = next_gen
-            next_gen = []
-
-        if t != 0:
-            raise RuntimeError('Simulation terminated early')
+    def to_table(self):
+        individual = np.array(self.graph.nodes)
+        time = self.attribute_array(individual, 'time')
+        parents = np.zeros((len(individual), 2))
+        father = np.zeros_like(individual)
+        mother = np.zeros_like(individual)
         
-        if not nx.is_weakly_connected(ped.graph):
-            # if multiple subgraphs, return largest
-            largest = max(nx.weakly_connected_components(ped.graph), key=len)
-            Gl = nx.subgraph(ped.graph, largest)
-            # relabel
-            ped.graph = nx.convert_node_labels_to_integers(Gl,
-                                                           ordering='sorted',
-                                                           first_label=1)
+        for i, node in enumerate(self.graph.nodes):
+            pred = list(self.graph.predecessors(node))
+            if pred:
+                father[i] = pred[0]
+                mother[i] = pred[1]
+        tbl = np.vstack((individual, father, mother, time)).transpose()
 
-        ped.generations = generations
+        return pd.DataFrame(tbl, columns=['individual', 'father', 'mother', 'time'])
+                        
 
-        return ped
-
-    def to_msprime_pedigree(self, f_name=None, header=False):
-
-        ped_df = []
-        node_time = self.get_node_attributes('time')
-
-        for n in self.nodes:
-            p = self.predecessors(n)
-            if len(p) == 2:
-                ped_df.append([n, p[0], p[1], node_time[n]])
-            elif len(p) == 1:
-                ped_df.append([n, p[0], 0, node_time[n]])
-            else:
-                ped_df.append([n, 0, 0, node_time[n]])
-
-        ped_df = pd.DataFrame(ped_df,
-                              columns=["ind_id", "father", "mother", "time"])
-
-        if f_name is None:
-
-            sio = io.StringIO()
-            ped_df.to_csv(sio, sep="\t", index=False)
-            sio.seek(0)
-            msp_ped = msp.Pedigree.read_txt(sio, time_col=3)
-
-            msp_ped.set_samples(sample_IDs=self.probands())
-
-            return msp_ped
-        else:
-            ped_df.to_csv(f_name, index=False, header=header, sep="\t")
-
+    def to_msprime_pedigree(self):
+        tbl = self.to_table()
+        individual = tbl.individual.values
+        parent_IDs = np.vstack((tbl.father, tbl.mother)).transpose()
+        parent_idx = msp.Pedigree.parent_ID_to_index(individual, parent_IDs)
+        
+        msp_ped = msp.Pedigree(individual, parent_idx, tbl.time.values)
+        msp_ped.set_samples(sample_IDs=self.probands(), probands_only=True)
+        return msp_ped
+        
+        
     def generate_msprime_simulations(self,
                                      Ne=100,
-                                     model='wf_ped',
+                                     model_after='dtwf',
                                      mu=1e-8,
                                      length=1e6,
                                      rho=1e-8):
@@ -202,18 +110,96 @@ class Pedigree(Genealogical):
         )
 
         des = [
-            msp.SimulationModelChange(self.generations, model)
+            msp.SimulationModelChange(self.generations, model_after)
         ]
 
         return msp.simulate(len(self.probands()),
                             Ne=Ne,
                             pedigree=self.to_msprime_pedigree(),
-                            model=model,
+                            model='wf_ped',
                             mutation_rate=mu,
                             recombination_map=rm,
-                            end_time=self.generations,
                             demographic_events=des)
 
+    @classmethod
+    def simulate_from_founders(cls, n_founders, n_generations, avg_offspring=2, avg_immigrants=2):
+        """Simulate a genealogy forward in time, starting with `n_founders` individuals
+        If an odd number of individuals are provide, an extra founder will be added
+
+        Parameters
+        ----------
+        n_founders: int
+            Number of founders starting the population
+        n_generations: int
+            Number of generations to simulate
+        avg_offspring=2: float
+            Average number of children per family, mean of Poisson RV
+        avg_immigrants=2: float
+            Average number of out-of family individuals added each generation
+        Raises
+        ------
+        RuntimeError
+            If a simulation is terminated before `n_generations`
+        Returns
+        -------
+        Pedigree
+            A wrapper around networkx.DiGraph of relationships.
+            Each node carries following attributes:
+            time: int      - generation back in time
+            Founders all have time=`n_generations`
+        """
+
+        ped = cls()
+        ped.generations = n_generations
+        id_counter = count(1)
+        current_gen, next_gen = [], []
+
+        for founder in range(n_founders):
+            ind_id = next(id_counter)
+            ped.graph.add_node(ind_id, time=n_generations)
+            current_gen.append(ind_id)
+
+        for t in range(n_generations-1, -1, -1):
+
+            # Add extra parent if necessary
+            if len(current_gen) % 2 == 1:
+                ind_id = next(id_counter)
+                ped.graph.add_node(ind_id, time=t+1)
+                current_gen.append(ind_id)
+
+            # Pick couples
+            while len(current_gen):
+                mat_id, pat_id = rnd.choice(current_gen, 2, replace=False)
+                current_gen.remove(mat_id)
+                current_gen.remove(pat_id)
+                n_children = rnd.poisson(avg_offspring)
+
+                for ch in range(n_children):
+                    child_id = next(id_counter)
+                    next_gen.append(child_id)
+                    ped.add_child(child_id, mat_id, pat_id, time=t)
+
+            # add extra out-of-family individuals - but not in the present
+            if t > 1:
+                n_immigrants = rnd.poisson(avg_immigrants)
+                for ind in range(n_immigrants):
+                    ind_id = next(id_counter)
+                    next_gen.append(ind_id)
+                    ped.add_individual(ind_id, t)
+
+            if not next_gen:
+                raise(RuntimeError('Simulation terminated at time t=' + str(t) + ', (' + str(n_generations-t) + ' generations from founders)'))
+            current_gen = next_gen
+            next_gen = []
+
+        if not nx.is_weakly_connected(ped.graph):
+            # if multiple subgraphs, return largest
+            largest = max(nx.weakly_connected_components(ped.graph), key=len)
+            ped.graph = nx.subgraph(ped.graph, largest)
+
+        return ped
+
+    
     def sample_path(self):
         """
         Sample a coalescent path from a genealogy
@@ -229,9 +215,9 @@ class Pedigree(Genealogical):
         current_gen = set(self.probands())
         T = Traversal()
         T.generations = self.generations
-        T.graph.add_nodes_from(current_gen, time=0)
+        T.graph.add_nodes_from(current_gen, time=self.generations)
         
-        for t in range(1, self.generations + 1):
+        for t in range(self.generations):
             prev_gen = set()
             for individual in current_gen:
                 parents = self.predecessors(individual)

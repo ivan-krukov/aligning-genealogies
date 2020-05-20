@@ -86,19 +86,8 @@ pedigree = dict(
         mat_id = np.array([3,6,7,10,12,14,0,0,0,0,7,0,0,0]) * 10)
 
 
-# kd = kindepth(**pedigree)
-# assert np.allclose(kd, [2, 3, 1, 1, 2, 1, 0, 0, 0, 0, 1, 0, 0, 0])
-# print(kd)
-# K = kinmat(**pedigree)
+kd = kindepth(**pedigree)
+assert np.allclose(kd, [2, 3, 1, 1, 2, 1, 0, 0, 0, 0, 1, 0, 0, 0])
 
-import pandas as pd
+K = kinmat(**pedigree)
 
-balsac = pd.read_csv("/Users/ivan/tmp/balsac.csv")
-#balsac['depth'] = kindepth(balsac.ind, balsac.mother, balsac.father)
-#balsac.sort_values("depth", inplace=True)
-
-# todo - rip out
-# b100 = balsac.head(100)
-
-K = kinmat(balsac.ind, balsac.mother, balsac.father)
-# K = kindict(balsac)

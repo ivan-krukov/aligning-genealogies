@@ -1,8 +1,8 @@
 import networkx as nx
-from Genealogical import Genealogical
 import numpy as np
 import copy
 
+from .Genealogical import Genealogical
 
 class Traversal(Genealogical):
 
