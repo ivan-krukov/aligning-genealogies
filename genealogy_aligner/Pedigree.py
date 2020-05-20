@@ -139,17 +139,20 @@ class Pedigree(Genealogical):
         parent_idx = msp.Pedigree.parent_ID_to_index(individual, parent_IDs)
         
         msp_ped = msp.Pedigree(individual, parent_idx, tbl.time.values)
-        msp_ped.set_samples(sample_IDs=self.probands(), probands_only=True)
         return msp_ped
         
         
     def generate_msprime_simulations(self,
-                         complete=False,
-                         Ne=100,
-                         model_after='dtwf',
-                         mu=1e-8,
-                         length=1e6,
-                         rho=1e-8):
+                                     probands,
+                                     complete=False,
+                                     Ne=100,
+                                     model_after='dtwf',
+                                     mu=1e-8,
+                                     length=1e6,
+                                     rho=1e-8):
+
+        msp_ped = self.to_msprime_pedigree()
+        msp_ped.set_samples(sample_IDs=probands, probands_only=True)
 
         rm = msp.RecombinationMap(
             [0, int(length)],
@@ -161,9 +164,9 @@ class Pedigree(Genealogical):
         if complete:
             des.append(msp.SimulationModelChange(self.generations, model_after))
 
-        return msp.simulate(len(self.probands()),
+        return msp.simulate(sample_size=len(probands),
                             Ne=Ne,
-                            pedigree=self.to_msprime_pedigree(),
+                            pedigree=msp_ped,
                             model='wf_ped',
                             mutation_rate=mu,
                             recombination_map=rm,
