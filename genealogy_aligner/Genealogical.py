@@ -5,8 +5,11 @@ from collections.abc import Iterable
 
 class Genealogical(object):
 
-    def __init__(self):
-        self.graph = nx.DiGraph()
+    def __init__(self, graph=None):
+        if graph is None:
+            self.graph = nx.DiGraph()
+        else:
+            self.graph = graph
 
     @property
     def n_individuals(self):
