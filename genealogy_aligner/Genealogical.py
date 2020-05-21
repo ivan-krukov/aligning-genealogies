@@ -22,6 +22,10 @@ class Genealogical(object):
     def nodes(self):
         return list(self.graph.nodes())
 
+    @property
+    def attributes(self):
+        return list(list(self.graph.nodes(data=True))[0][1].keys())
+
     def predecessors(self, node, k=1, include_founders=False):
 
         nodes = [node]

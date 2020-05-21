@@ -24,11 +24,8 @@ class Pedigree(Genealogical):
         self.graph.add_edge(mat_id, child_id)
         self.graph.add_edge(pat_id, child_id)
 
-    def parents(self, node):
-        return self.predecessors(node)
-
     @staticmethod
-    def infer_time(ind_id, mat_id, pat_id):
+    def infer_time(ind_id, pat_id, mat_id):
         n = len(ind_id)
         assert n == len(mat_id)
         assert n == len(pat_id)
@@ -51,86 +48,134 @@ class Pedigree(Genealogical):
                 break
 
         # flip!
-        return np.abs(depth - max(depth))
+        return dict(zip(ind_id, np.abs(depth - max(depth))))
 
-    @classmethod
-    def read_balsac(cls, fname):
-        balsac_columns = ['ind', 'father', 'mother', 'sex']
+    def get_parents(self, n):
 
-        ped = cls()
-        ped_df = pd.read_csv(fname, sep="\t")
+        pred = self.predecessors(n)
 
-        if ped_df.columns.tolist() != balsac_columns:
-            raise RuntimeError("Unexpected column headers - required format" + str(balsac_columns))
-
-        time = Pedigree.infer_time(ped_df['ind'], ped_df['mother'], ped_df['father'])
-        ped.generations = max(time)
-
-        for i, row in ped_df.iterrows():
-            ind, pat_id, mat_id, sex = row
-            if pat_id == mat_id == 0:
-                ped.add_individual(ind, time[i])
+        if len(pred) == 0:
+            # no listed parents
+            father, mother = (0, 0)
+        elif len(pred) == 1:
+            # 1 listed parent
+            if 'sex' in self.attributes:
+                if self.get_node_attributes('sex', pred[0]) == 1:
+                    father, mother = (pred[0], 0)
+                elif self.get_node_attributes('sex', pred[0]) == 2:
+                    father, mother = (0, pred[0])
+                else:
+                    # if sex of listed parent is unknown, choose randomly:
+                    father, mother = np.random.choice([0, pred[0]], 2, replace=False)
             else:
-                ped.add_child(ind, pat_id, mat_id, time[i])
+                # if sex of listed parent is unknown, choose randomly:
+                father, mother = np.random.choice([0, pred[0]], 2, replace=False)
+        else:
+            if 'sex' in self.attributes:
 
-        return ped
+                pred_sex = [self.get_node_attributes('sex', p) for p in pred]
+
+                if pred_sex[0] == 1 or pred_sex[1] == 2:
+                    father, mother = pred
+                elif pred_sex[0] == 2 or pred_sex[1] == 1:
+                    father, mother = pred[::-1]
+                else:
+                    # if sex of listed parents is unknown, choose randomly:
+                    father, mother = np.random.choice(pred, 2, replace=False)
+            else:
+                # if sex of listed parents is unknown, choose randomly:
+                father, mother = np.random.choice([0, pred[0]], 2, replace=False)
+
+        return father, mother
 
     @classmethod
-    def from_msprime_pedigree(cls, fname, header=False, filter_zeros=True):
+    def from_table(cls, f_name, attrs=('time',),
+                   header=False, check_2_parents=True):
 
         ped = cls()
 
         if header:
-            gen_df = pd.read_csv(fname, sep="\t")
+            ped_df = pd.read_csv(f_name, sep="\t")
+            attrs = list(ped_df.columns[3:])
+            ped_df.columns = ["individual", "father", "mother"] + attrs
         else:
-            gen_df = pd.read_csv(fname, sep="\t",
-                                 names=["ind_id", "father", "mother", "time"])
+            ped_df = pd.read_csv(f_name, sep="\t",
+                                 names=["individual", "father", "mother"] + list(attrs))
 
-        ped.generations = gen_df['time'].max()
+        # -------------------------------------------------------
+        # Checking validity of table:
 
-        # Filter out entries with node 0:
-        if filter_zeros:
-            gen_df = gen_df[(gen_df.iloc[:, :-1] != 0).all(axis=1)]
+        if check_2_parents:
+            cond = (
+                    ((ped_df['father'] == 0) & (ped_df['mother'] != 0)) |
+                    ((ped_df['mother'] == 0) & (ped_df['father'] != 0)) |
+                    ((ped_df['father'] != 0) & (ped_df['father'] == ped_df['mother']))
+            )
+
+            if sum(cond) > 0:
+                raise ValueError("Pedigree has individuals with 1 parent only. "
+                                 "Either set `check_2_parents` to False or remove those "
+                                 "individuals from the pedigree.")
 
         # -------------------------------------------------------
         # Add all nodes and edges to the graph:
-        ped.graph.add_edges_from(zip(gen_df["father"], gen_df["ind_id"]))
-        ped.graph.add_edges_from(zip(gen_df["mother"], gen_df["ind_id"]))
+        ped.graph.add_edges_from(zip(ped_df["father"], ped_df["individual"]))
+        ped.graph.add_edges_from(zip(ped_df["mother"], ped_df["individual"]))
 
         # -------------------------------------------------------
         # Add node attributes:
-        nx.set_node_attributes(ped.graph, dict(zip(gen_df['ind_id'], gen_df['time'])), 'time')
 
-        def infer_sex(node_id):
-            if node_id in gen_df['father']:
-                return 'M'
-            elif node_id in gen_df['mother']:
-                return 'F'
-            else:
-                return 'U'
+        for attr in attrs:
+            nx.set_node_attributes(ped.graph,
+                                   dict(zip(ped_df['individual'], ped_df[attr])),
+                                   attr)
 
-        gen_df['sex'] = gen_df['ind_id'].apply(infer_sex)
+        # Adding inferred time if not in attribute list:
+        if 'time' not in attrs:
+            nx.set_node_attributes(ped.graph,
+                                   Pedigree.infer_time(ped_df['individual'],
+                                                       ped_df['father'],
+                                                       ped_df['mother']),
+                                   'time')
 
-        nx.set_node_attributes(ped.graph, dict(zip(gen_df['ind_id'], gen_df['sex'])), 'sex')
+        # Adding inferred sex if not in attribute list:
+        if 'sex' not in attrs:
+
+            def infer_sex(node_id):
+                if node_id in ped_df['father']:
+                    return 1
+                elif node_id in ped_df['mother']:
+                    return 2
+                else:
+                    return -1
+
+            ped_df['sex'] = ped_df['ind_id'].apply(infer_sex)
+
+            nx.set_node_attributes(ped.graph,
+                                   dict(zip(ped_df['ind_id'], ped_df['sex'])),
+                                   'sex')
+
+        # -------------------------------------------------------
+        # Final touches
+
+        node_time = ped.get_node_attributes('time')
+        ped.generations = max(node_time.values())
+
+        ped.graph.remove_node(0)
 
         return ped
 
-    def to_table(self, f_name=None, header=False):
+    def to_table(self, f_name=None, header=False, attrs=('time',)):
 
-        node_time = self.get_node_attributes('time')
         ped_df = []
         
         for i, n in enumerate(self.nodes):
-            p = self.predecessors(n)
-            if len(p) == 2:
-                ped_df.append([n, p[0], p[1], node_time[n]])
-            elif len(p) == 1:
-                ped_df.append([n, p[0], 0, node_time[n]])
-            else:
-                ped_df.append([n, 0, 0, node_time[n]])
+
+            node_attr = [self.get_node_attributes(at, n) for at in attrs]
+            ped_df.append([n] + list(self.get_parents(n)) + node_attr)
 
         ped_df = pd.DataFrame(ped_df,
-                              columns=['individual', 'father', 'mother', 'time'])
+                              columns=['individual', 'father', 'mother'] + list(attrs))
 
         if f_name is None:
             return ped_df
@@ -163,9 +208,12 @@ class Pedigree(Genealogical):
             discrete=True
         )
 
-        des = [
-            msp.SimulationModelChange(self.generations, model_after)
-        ]
+        if model_after:
+            des = [
+                msp.SimulationModelChange(self.generations, model_after)
+            ]
+        else:
+            des = []
 
         return msp.simulate(len(self.probands()),
                             Ne=Ne,
@@ -242,7 +290,9 @@ class Pedigree(Genealogical):
                     ped.add_individual(ind_id, t)
 
             if not next_gen:
-                raise(RuntimeError('Simulation terminated at time t=' + str(t) + ', (' + str(n_generations-t) + ' generations from founders)'))
+                raise(RuntimeError('Simulation terminated at time t=' + str(t) +
+                                   ', (' + str(n_generations-t) +
+                                   ' generations from founders)'))
             current_gen = next_gen
             next_gen = []
 
