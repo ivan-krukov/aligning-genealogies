@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
 from .evaluation import accuracy
 from .utils import greedy_matching
 
@@ -46,6 +48,45 @@ class Aligner(object):
         }
 
         return metrics
+
+    def draw(self, use_predicted=False,
+             figsize=(16, 8), labels=True,
+             ped_node_color=None, ts_node_color=None):
+
+        if use_predicted and (self.pred_ts_node_to_ped_node is None):
+            raise Exception("You must call .align() in order to view predicted alignments.")
+
+        fig, axes = plt.subplots(ncols=2, figsize=figsize)
+
+        self.ped.draw(ax=axes[0], node_color=ped_node_color, labels=labels)
+        self.ts.draw(ax=axes[1], node_color=ts_node_color, labels=labels)
+
+        ped_layout = self.ped.get_graphviz_layout()
+        ts_layout = self.ts.get_graphviz_layout()
+
+        if use_predicted:
+            align_map = self.pred_ts_node_to_ped_node
+        else:
+            align_map = self.true_ts_node_to_ped_node
+
+        # Transform figure:
+        ax0tr = axes[0].transData
+        ax1tr = axes[1].transData
+        figtr = fig.transFigure.inverted()
+
+        for ts_n, ped_n in align_map:
+            # 2. Transform arrow start point from axis 0 to figure coordinates
+            ptB = figtr.transform(ax0tr.transform(ped_layout[ped_n]))
+            # 3. Transform arrow end point from axis 1 to figure coordinates
+            ptE = figtr.transform(ax1tr.transform(ts_layout[ts_n]))
+            # 4. Create the patch
+            arrow = matplotlib.patches.FancyArrowPatch(
+                ptB, ptE, transform=fig.transFigure,  # Place arrow in figure coord system
+                fc="grey", connectionstyle="arc3,rad=0.3", arrowstyle='-', alpha=0.3,
+                shrinkA=10, shrinkB=10, linestyle='dashed'
+            )
+            # 5. Add patch to list of objects to draw onto the figure
+            fig.patches.append(arrow)
 
 
 class DescMatchingAligner(Aligner):

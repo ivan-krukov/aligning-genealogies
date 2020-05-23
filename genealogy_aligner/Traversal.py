@@ -1,6 +1,7 @@
 import networkx as nx
 import numpy as np
 import copy
+import matplotlib.pyplot as plt
 
 from .Genealogical import Genealogical
 
@@ -95,9 +96,18 @@ class Traversal(Genealogical):
         else:
             return t_obj
 
-    def draw(self, node_color=None, labels=True, ax=None, node_shape='s',
+    def get_graphviz_layout(self):
+        return nx.drawing.nx_agraph.graphviz_layout(self.graph.reverse(),
+                                                    prog='dot',
+                                                    args='-Grankdir=BT')
+
+    def draw(self, ax=None, figsize=(8, 6),
+             node_color=None, labels=True, node_shape='s',
              default_color='#2b8cbe', **kwargs):
         """Uses `graphviz` `dot` to plot the genealogy"""
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
 
         if node_color is None:
             node_col = [default_color]*self.n_individuals
@@ -109,9 +119,8 @@ class Traversal(Genealogical):
                 except KeyError:
                     node_col.append(default_color)
 
-        rev = self.graph.reverse()
-        pos = nx.drawing.nx_agraph.graphviz_layout(rev, prog='dot',
-                                                   args='-Grankdir=BT')
-        nx.draw(rev, pos=pos, with_labels=labels, node_shape=node_shape,
+        nx.draw(self.graph.reverse(),
+                pos=self.get_graphviz_layout(),
+                with_labels=labels, node_shape=node_shape,
                 node_color=node_col, ax=ax, font_color='white', font_size=8,
                 arrows=False, **kwargs)

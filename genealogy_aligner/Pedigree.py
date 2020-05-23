@@ -5,6 +5,7 @@ from itertools import count
 import numpy as np
 import pandas as pd
 from numpy import random as rnd
+import matplotlib.pyplot as plt
 
 from .Genealogical import Genealogical
 from .Traversal import Traversal
@@ -353,20 +354,27 @@ class Pedigree(Genealogical):
             current_gen = prev_gen
         return T
 
-    def draw(self, node_color=None, labels=True, ax=None,
+    def draw(self, ax=None, figsize=(8, 6), node_color=None, labels=True,
              default_color='#2b8cbe', **kwargs):
         """Uses `graphviz` `dot` to plot the genealogy"""
 
-        if node_color is None:
-            node_col = dict(zip(self.nodes, [default_color]*self.n_individuals))
+        if 'sex' not in self.attributes:
+            super().draw(labels=labels, node_color=node_color,
+                         default_color=default_color, ax=ax, **kwargs)
         else:
-            node_col = node_color
-            for n in self.nodes:
-                if n not in node_col:
-                    node_col[n] = default_color
 
-        if 'sex' in self.attributes:
-            pos = nx.drawing.nx_agraph.graphviz_layout(self.graph, prog='dot')
+            if ax is None:
+                fig, ax = plt.subplots(figsize=figsize)
+
+            if node_color is None:
+                node_col = dict(zip(self.nodes, [default_color] * self.n_individuals))
+            else:
+                node_col = node_color
+                for n in self.nodes:
+                    if n not in node_col:
+                        node_col[n] = default_color
+
+            pos = self.get_graphviz_layout()
 
             node_sex = self.get_node_attributes('sex')
             males = [n for n, s in node_sex.items() if s == 1]
@@ -394,5 +402,6 @@ class Pedigree(Genealogical):
 
             # Draw edges
             nx.draw_networkx_edges(self.graph, pos, ax=ax, **kwargs)
-        else:
-            super().draw(labels=labels, ax=ax, **kwargs)
+
+            # Turn off axis
+            ax.set_axis_off()

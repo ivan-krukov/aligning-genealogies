@@ -1,5 +1,6 @@
 import networkx as nx
 from collections.abc import Iterable
+import matplotlib.pyplot as plt
 
 
 class Genealogical(object):
@@ -132,9 +133,14 @@ class Genealogical(object):
 
         return ntp
 
-    def draw(self, node_color=None, labels=True, node_shape='s', ax=None,
-             default_color='#2b8cbe', **kwargs):
-        """Uses `graphviz` `dot` to plot the genealogy"""
+    def get_graphviz_layout(self):
+        return nx.drawing.nx_agraph.graphviz_layout(self.graph, prog='dot')
+
+    def draw(self, ax=None, figsize=(16, 8), node_color=None, labels=True,
+             node_shape='s', default_color='#2b8cbe', **kwargs):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
 
         if node_color is None:
             node_col = [default_color]*self.n_individuals
@@ -146,7 +152,6 @@ class Genealogical(object):
                 except KeyError:
                     node_col.append(default_color)
 
-        pos = nx.drawing.nx_agraph.graphviz_layout(self.graph, prog='dot')
-        nx.draw(self.graph, pos=pos, with_labels=labels,
+        nx.draw(self.graph, pos=self.get_graphviz_layout(), with_labels=labels,
                 node_shape=node_shape, node_color=node_col,
                 ax=ax, font_color='white', font_size=8, **kwargs)
