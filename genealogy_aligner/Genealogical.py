@@ -132,8 +132,21 @@ class Genealogical(object):
 
         return ntp
 
-    def draw(self, labels=True, ax=None, **kwargs):
+    def draw(self, node_color=None, labels=True, node_shape='s', ax=None,
+             default_color='#2b8cbe', **kwargs):
         """Uses `graphviz` `dot` to plot the genealogy"""
+
+        if node_color is None:
+            node_col = [default_color]*self.n_individuals
+        else:
+            node_col = []
+            for n in self.nodes:
+                try:
+                    node_col.append(node_color[n])
+                except KeyError:
+                    node_col.append(default_color)
+
         pos = nx.drawing.nx_agraph.graphviz_layout(self.graph, prog='dot')
         nx.draw(self.graph, pos=pos, with_labels=labels,
-                node_shape='s', ax=ax, font_color='white', font_size=8, **kwargs)
+                node_shape=node_shape, node_color=node_col,
+                ax=ax, font_color='white', font_size=8, **kwargs)

@@ -352,3 +352,47 @@ class Pedigree(Genealogical):
 
             current_gen = prev_gen
         return T
+
+    def draw(self, node_color=None, labels=True, ax=None,
+             default_color='#2b8cbe', **kwargs):
+        """Uses `graphviz` `dot` to plot the genealogy"""
+
+        if node_color is None:
+            node_col = dict(zip(self.nodes, [default_color]*self.n_individuals))
+        else:
+            node_col = node_color
+            for n in self.nodes:
+                if n not in node_col:
+                    node_col[n] = default_color
+
+        if 'sex' in self.attributes:
+            pos = nx.drawing.nx_agraph.graphviz_layout(self.graph, prog='dot')
+
+            node_sex = self.get_node_attributes('sex')
+            males = [n for n, s in node_sex.items() if s == 1]
+            females = [n for n, s in node_sex.items() if s == 2]
+            unknown = [n for n, s in node_sex.items() if s == -1]
+
+            # Draw nodes:
+            nx.draw_networkx_nodes(self.graph, pos, nodelist=females,
+                                   node_shape='o',
+                                   node_color=[node_col[f] for f in females],
+                                   ax=ax, **kwargs)
+            nx.draw_networkx_nodes(self.graph, pos, nodelist=males,
+                                   node_shape='s',
+                                   node_color=[node_col[m] for m in males],
+                                   ax=ax, **kwargs)
+            nx.draw_networkx_nodes(self.graph, pos, nodelist=unknown,
+                                   node_shape='p',
+                                   node_color=[node_col[u] for u in unknown],
+                                   ax=ax, **kwargs)
+
+            # Draw labels
+            if labels:
+                nx.draw_networkx_labels(self.graph, pos, font_color='white',
+                                        font_size=8, ax=ax)
+
+            # Draw edges
+            nx.draw_networkx_edges(self.graph, pos, ax=ax, **kwargs)
+        else:
+            super().draw(labels=labels, ax=ax, **kwargs)
