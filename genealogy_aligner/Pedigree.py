@@ -200,7 +200,8 @@ class Pedigree(Genealogical):
                                      model_after='dtwf',
                                      mu=1e-8,
                                      length=1e6,
-                                     rho=1e-8):
+                                     rho=1e-8,
+                                     convert_to_traversal=True):
 
         rm = msp.RecombinationMap(
             [0, int(length)],
@@ -215,13 +216,30 @@ class Pedigree(Genealogical):
         else:
             des = []
 
-        return msp.simulate(len(self.probands()),
-                            Ne=Ne,
-                            pedigree=self.to_msprime_pedigree(),
-                            model='wf_ped',
-                            mutation_rate=mu,
-                            recombination_map=rm,
-                            demographic_events=des)
+        sim = msp.simulate(len(self.probands()),
+                           Ne=Ne,
+                           pedigree=self.to_msprime_pedigree(),
+                           model='wf_ped',
+                           mutation_rate=mu,
+                           recombination_map=rm,
+                           demographic_events=des)
+
+        ts_nodes_to_ped_map = {}
+
+        for n in sim.nodes():
+            if n.individual != -1:
+                ind_info = sim.individual(n.individual)
+                ts_nodes_to_ped_map[n.id] = int(ind_info.metadata.decode())
+
+        if convert_to_traversal:
+            traversals = []
+            for ts in sim.aslist():
+                t = Traversal()
+                t.graph.add_edges_from([(v, k) for k, v in ts.parent_dict.items()])
+                traversals.append(t)
+            return sim, ts_nodes_to_ped_map, traversals
+        else:
+            return sim, ts_nodes_to_ped_map
 
     @classmethod
     def simulate_from_founders(cls, n_founders, n_generations, avg_offspring=2, avg_immigrants=2):
