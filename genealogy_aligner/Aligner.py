@@ -78,8 +78,6 @@ class Aligner(object):
                      if ped_n not in self.ped.probands()]
 
         for i, (ts_n, ped_n) in enumerate(align_map):
-            if ped_n in self.ped.probands():
-                continue
             # 2. Transform arrow start point from axis 0 to figure coordinates
             ptB = figtr.transform(ax0tr.transform(ped_layout[ped_n]))
             # 3. Transform arrow end point from axis 1 to figure coordinates
