@@ -43,7 +43,8 @@ class Aligner(object):
     def draw(self, use_predicted=False,
              figsize=(16, 8), labels=True,
              ped_node_color=None, ts_node_color=None,
-             use_ped_labels=True):
+             use_ped_labels=True,
+             edge_color_map='nipy_spectral'):
 
         if use_predicted and (self.pred_ts_node_to_ped_node is None):
             raise Exception("You must call .align() in order to view predicted alignments.")
@@ -71,7 +72,14 @@ class Aligner(object):
         ax1tr = axes[1].transData
         figtr = fig.transFigure.inverted()
 
-        for ts_n, ped_n in align_map:
+        cmap = matplotlib.cm.get_cmap(edge_color_map)
+
+        align_map = [(ts_n, ped_n) for ts_n, ped_n in align_map
+                     if ped_n not in self.ped.probands()]
+
+        for i, (ts_n, ped_n) in enumerate(align_map):
+            if ped_n in self.ped.probands():
+                continue
             # 2. Transform arrow start point from axis 0 to figure coordinates
             ptB = figtr.transform(ax0tr.transform(ped_layout[ped_n]))
             # 3. Transform arrow end point from axis 1 to figure coordinates
@@ -79,7 +87,8 @@ class Aligner(object):
             # 4. Create the patch
             arrow = matplotlib.patches.FancyArrowPatch(
                 ptB, ptE, transform=fig.transFigure,  # Place arrow in figure coord system
-                fc="grey", connectionstyle="arc3,rad=0.3", arrowstyle='-', alpha=0.3,
+                color=cmap(i/len(align_map)), connectionstyle="arc3,rad=0.3",
+                arrowstyle='-', alpha=0.3,
                 shrinkA=10, shrinkB=10, linestyle='dashed'
             )
             # 5. Add patch to list of objects to draw onto the figure
