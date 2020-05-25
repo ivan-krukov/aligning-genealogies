@@ -1,6 +1,6 @@
 import networkx as nx
-import numpy as np
 from collections.abc import Iterable
+import matplotlib.pyplot as plt
 
 
 class Genealogical(object):
@@ -22,6 +22,10 @@ class Genealogical(object):
     @property
     def nodes(self):
         return list(self.graph.nodes())
+
+    @property
+    def attributes(self):
+        return list(list(self.graph.nodes(data=True))[0][1].keys())
 
     def predecessors(self, node, k=1, include_founders=False):
 
@@ -75,40 +79,25 @@ class Genealogical(object):
         else:
             return node_attr[node]
 
-
-    def attribute_array(self, nodes, attr):
-        """Return a sorted array of attributes for the given nodes"""
-        attr_dict = nx.get_node_attributes(self.graph, attr)
-        return np.array([attr_dict[n] for n in nodes])
-
-
     def get_individuals_at_generation(self, k):
         return self.filter_nodes(lambda node, data: data['time'] == k)
 
-    
-    def founders(self, use_time=False):
+    def founders(self):
         """
         Get a list of nodes that don't have predecessors
         :return:
         """
-        if use_time:
-            return self.filter_nodes(
-                lambda node, data: data['time'] == self.generations
-            )
-        else:
-            return self.filter_nodes(
-                lambda node, data: len(list(self.graph.predecessors(node))) == 0
-            )
+        return self.filter_nodes(
+            lambda node, data: len(self.predecessors(node)) == 0
+        )
 
     def probands(self, use_time=True):
         """Get a list of individuals at present day"""
         if use_time:
-            return self.filter_nodes(
-                lambda node, data: data['time'] == 0
-            )
+            return self.get_individuals_at_generation(0)
         else:
             return self.filter_nodes(
-                lambda node, data: len(list(self.graph.successors(node))) == 0
+                lambda node, data: len(self.successors(node)) == 0
             )
 
     def get_probands_under(self, nodes=None, climb_up_step=0):
@@ -124,7 +113,7 @@ class Genealogical(object):
 
             ntp[n] = set()
 
-            base_set = self.predecessors(n, climb_up_step, include_self=True)
+            base_set = self.predecessors(n, climb_up_step, include_founders=True)
             n_set = []
             for ns in base_set:
                 n_set += self.successors(ns)
@@ -144,8 +133,25 @@ class Genealogical(object):
 
         return ntp
 
-    def draw(self, labels=True, ax=None, **kwargs):
-        """Uses `graphviz` `dot` to plot the genealogy"""
-        pos = nx.drawing.nx_agraph.graphviz_layout(self.graph, prog='dot')
-        nx.draw(self.graph, pos=pos, with_labels=labels,
-                node_shape='s', ax=ax, font_color='white', font_size=8, **kwargs)
+    def get_graphviz_layout(self):
+        return nx.drawing.nx_agraph.graphviz_layout(self.graph, prog='dot')
+
+    def draw(self, ax=None, figsize=(16, 8), node_color=None, labels=True,
+             node_shape='s', default_color='#2b8cbe', **kwargs):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+
+        if node_color is None:
+            node_col = [default_color]*self.n_individuals
+        else:
+            node_col = []
+            for n in self.nodes:
+                try:
+                    node_col.append(node_color[n])
+                except KeyError:
+                    node_col.append(default_color)
+
+        nx.draw(self.graph, pos=self.get_graphviz_layout(), with_labels=labels,
+                node_shape=node_shape, node_color=node_col,
+                ax=ax, font_color='white', font_size=8, **kwargs)

@@ -1,15 +1,17 @@
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
 from .evaluation import accuracy
 from .utils import greedy_matching
 
 
 class Aligner(object):
 
-    def __init__(self, ped, ts, aligned_nodes=None):
+    def __init__(self, ped, ts):
         """
 
         :param ped: A pedigree
-        :param ts: A tree sequence
+        :param ts: A traversal object
         :param aligned_pairs: A list of tuples of the form (n_ts, n_ped) where `n_ts` is the
         node in the tree sequence and `n_ped` is the node in the pedigree.
         """
@@ -17,17 +19,8 @@ class Aligner(object):
         self.ped = ped
         self.ts = ts
 
-        if aligned_nodes is None:
-            self.true_ts_node_to_ped_node = [
-                (n_ts, n_ped)
-                for n_ped in ped.nodes
-                for n_ts in ts.nodes
-                if n_ped == n_ts
-            ]
-        else:
-            self.true_ts_node_to_ped_node = aligned_nodes
-
-        self.true_ped_node_to_ts_edge = ts.ts_edges_to_ped_nodes
+        self.true_ts_node_to_ped_node = ts.ts_node_to_ped_node.items()
+        self.true_ped_node_to_ts_edge = ts.ped_node_to_ts_edge
 
         self.pred_ts_node_to_ped_node = None
         self.pred_ped_node_to_ts_edge = None
@@ -41,10 +34,63 @@ class Aligner(object):
             raise Exception("No pairs are predicted to be aligned. Call `align` first.")
 
         metrics = {
-            'accuracy': accuracy(self.aligned_pairs, self.pred_ts_node_to_ped_node)
+            'accuracy': accuracy(self.true_ts_node_to_ped_node,
+                                 self.pred_ts_node_to_ped_node)
         }
 
         return metrics
+
+    def draw(self, use_predicted=False,
+             figsize=(16, 8), labels=True,
+             ped_node_color=None, ts_node_color=None,
+             use_ped_labels=True,
+             edge_color_map='nipy_spectral'):
+
+        if use_predicted and (self.pred_ts_node_to_ped_node is None):
+            raise Exception("You must call .align() in order to view predicted alignments.")
+
+        fig, axes = plt.subplots(ncols=2, figsize=figsize)
+
+        self.ped.draw(ax=axes[0], node_color=ped_node_color, labels=labels)
+
+        if use_ped_labels:
+            self.ts.draw(ax=axes[1], node_color=ts_node_color, labels=labels,
+                         label_dict=self.ts.ts_node_to_ped_node)
+        else:
+            self.ts.draw(ax=axes[1], node_color=ts_node_color, labels=labels)
+
+        ped_layout = self.ped.get_graphviz_layout()
+        ts_layout = self.ts.get_graphviz_layout()
+
+        if use_predicted:
+            align_map = self.pred_ts_node_to_ped_node
+        else:
+            align_map = self.true_ts_node_to_ped_node
+
+        # Transform figure:
+        ax0tr = axes[0].transData
+        ax1tr = axes[1].transData
+        figtr = fig.transFigure.inverted()
+
+        cmap = matplotlib.cm.get_cmap(edge_color_map)
+
+        align_map = [(ts_n, ped_n) for ts_n, ped_n in align_map
+                     if ped_n not in self.ped.probands()]
+
+        for i, (ts_n, ped_n) in enumerate(align_map):
+            # 2. Transform arrow start point from axis 0 to figure coordinates
+            ptB = figtr.transform(ax0tr.transform(ped_layout[ped_n]))
+            # 3. Transform arrow end point from axis 1 to figure coordinates
+            ptE = figtr.transform(ax1tr.transform(ts_layout[ts_n]))
+            # 4. Create the patch
+            arrow = matplotlib.patches.FancyArrowPatch(
+                ptB, ptE, transform=fig.transFigure,  # Place arrow in figure coord system
+                color=cmap(i/len(align_map)), connectionstyle="arc3,rad=0.3",
+                arrowstyle='-', alpha=0.3,
+                shrinkA=10, shrinkB=10, linestyle='dashed'
+            )
+            # 5. Add patch to list of objects to draw onto the figure
+            fig.patches.append(arrow)
 
 
 class DescMatchingAligner(Aligner):
@@ -53,8 +99,8 @@ class DescMatchingAligner(Aligner):
     sets of descendants (probands).
     """
 
-    def __init__(self, ped, ts, aligned_pairs=None, climb_up_step=0):
-        super().__init__(ped, ts, aligned_pairs)
+    def __init__(self, ped, ts, climb_up_step=0):
+        super().__init__(ped, ts)
         self.climb_up_step = climb_up_step
 
     def align(self):

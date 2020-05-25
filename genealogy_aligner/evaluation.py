@@ -1,6 +1,7 @@
 import numpy as np
 from .utils import greedy_matching, soft_ordering
 
+
 def accuracy(pos_anchors, pred_anchors):
     """
     Defined as in Equation (13) of Trung et al.
@@ -11,6 +12,7 @@ def accuracy(pos_anchors, pred_anchors):
 
     """
     return float(len(set(pos_anchors).intersection(set(pred_anchors)))) / len(pos_anchors)
+
 
 def MAP(pairs, sim_score):
     s_order = soft_ordering(pairs, sim_score)
