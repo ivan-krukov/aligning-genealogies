@@ -263,6 +263,10 @@ class Pedigree(Genealogical):
                 t.graph.add_edges_from([(v, k) for k, v in ts.parent_dict.items()])
                 t.ts_node_to_ped_node = {k: v for k, v in ts_nodes_to_ped_map.items()
                                          if k in t.graph.nodes}
+                # Set time information:
+                nx.set_node_attributes(t.graph,
+                                       {n: ts.get_time(n) for n in t.nodes},
+                                       'time')
                 traversals.append(t)
             return sim, traversals
         else:
