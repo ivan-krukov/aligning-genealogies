@@ -251,7 +251,7 @@ class Pedigree(Genealogical):
         return ped
 
     
-    def sample_path(self):
+    def sample_path(self, probands):
         """
         Sample a coalescent path from a genealogy
 
@@ -263,7 +263,7 @@ class Pedigree(Genealogical):
         A `Traversal` object
         """
 
-        current_gen = set(self.probands())
+        current_gen = set(probands)
         T = Traversal()
         T.generations = self.generations
         T.graph.add_nodes_from(current_gen, time=self.generations)

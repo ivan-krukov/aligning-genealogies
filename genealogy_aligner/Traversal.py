@@ -6,26 +6,10 @@ from .Genealogical import Genealogical
 
 class Traversal(Genealogical):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, graph=None):
+        super().__init__(graph)
         self.ts_edges_to_ped_nodes = {}
         
-    def similarity(self, G):
-        # A kinship-like distance function
-        n = G.n_individuals
-        K = np.zeros((n, n), dtype=float)
-        
-        for i in range(n):
-            if i in self:
-                K[i, i] = 0.5
-                for j in range(i+1, n):
-                    if j in self:
-                        if any(self.predecessors(j)):
-                            p = next(self.predecessors(j))
-                            K[i, j] = (K[i, p]/2)
-                            K[j, i] = K[i, j]
-        return K
-
     def to_coalescent_tree(self, add_common_ancestors=True, inplace=False):
 
         t_obj = copy.deepcopy(self)
