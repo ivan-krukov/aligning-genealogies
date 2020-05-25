@@ -7,11 +7,11 @@ from .utils import greedy_matching
 
 class Aligner(object):
 
-    def __init__(self, ped, ts, aligned_nodes=None):
+    def __init__(self, ped, ts):
         """
 
         :param ped: A pedigree
-        :param ts: A tree sequence
+        :param ts: A traversal object
         :param aligned_pairs: A list of tuples of the form (n_ts, n_ped) where `n_ts` is the
         node in the tree sequence and `n_ped` is the node in the pedigree.
         """
@@ -19,17 +19,8 @@ class Aligner(object):
         self.ped = ped
         self.ts = ts
 
-        if aligned_nodes is None:
-            self.true_ts_node_to_ped_node = [
-                (n_ts, n_ped)
-                for n_ped in ped.nodes
-                for n_ts in ts.nodes
-                if n_ped == n_ts
-            ]
-        else:
-            self.true_ts_node_to_ped_node = aligned_nodes
-
-        self.true_ped_node_to_ts_edge = ts.ts_edges_to_ped_nodes
+        self.true_ts_node_to_ped_node = ts.ts_node_to_ped_node.items()
+        self.true_ped_node_to_ts_edge = ts.ped_node_to_ts_edge
 
         self.pred_ts_node_to_ped_node = None
         self.pred_ped_node_to_ts_edge = None
@@ -51,7 +42,8 @@ class Aligner(object):
 
     def draw(self, use_predicted=False,
              figsize=(16, 8), labels=True,
-             ped_node_color=None, ts_node_color=None):
+             ped_node_color=None, ts_node_color=None,
+             use_ped_labels=True):
 
         if use_predicted and (self.pred_ts_node_to_ped_node is None):
             raise Exception("You must call .align() in order to view predicted alignments.")
@@ -59,7 +51,12 @@ class Aligner(object):
         fig, axes = plt.subplots(ncols=2, figsize=figsize)
 
         self.ped.draw(ax=axes[0], node_color=ped_node_color, labels=labels)
-        self.ts.draw(ax=axes[1], node_color=ts_node_color, labels=labels)
+
+        if use_ped_labels:
+            self.ts.draw(ax=axes[1], node_color=ts_node_color, labels=labels,
+                         label_dict=self.ts.ts_node_to_ped_node)
+        else:
+            self.ts.draw(ax=axes[1], node_color=ts_node_color, labels=labels)
 
         ped_layout = self.ped.get_graphviz_layout()
         ts_layout = self.ts.get_graphviz_layout()
@@ -95,8 +92,8 @@ class DescMatchingAligner(Aligner):
     sets of descendants (probands).
     """
 
-    def __init__(self, ped, ts, aligned_pairs=None, climb_up_step=0):
-        super().__init__(ped, ts, aligned_pairs)
+    def __init__(self, ped, ts, climb_up_step=0):
+        super().__init__(ped, ts)
         self.climb_up_step = climb_up_step
 
     def align(self):

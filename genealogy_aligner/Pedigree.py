@@ -67,10 +67,10 @@ class Pedigree(Genealogical):
                     father, mother = (0, pred[0])
                 else:
                     # if sex of listed parent is unknown, choose randomly:
-                    father, mother = np.random.choice([0, pred[0]], 2, replace=False)
+                    father, mother = rnd.choice([0, pred[0]], 2, replace=False)
             else:
                 # if sex of listed parent is unknown, choose randomly:
-                father, mother = np.random.choice([0, pred[0]], 2, replace=False)
+                father, mother = rnd.choice([0, pred[0]], 2, replace=False)
         else:
             if 'sex' in self.attributes:
 
@@ -82,10 +82,10 @@ class Pedigree(Genealogical):
                     father, mother = pred[::-1]
                 else:
                     # if sex of listed parents is unknown, choose randomly:
-                    father, mother = np.random.choice(pred, 2, replace=False)
+                    father, mother = rnd.choice(pred, 2, replace=False)
             else:
                 # if sex of listed parents is unknown, choose randomly:
-                father, mother = np.random.choice([0, pred[0]], 2, replace=False)
+                father, mother = rnd.choice(pred, 2, replace=False)
 
         return father, mother
 
@@ -166,7 +166,10 @@ class Pedigree(Genealogical):
 
         return ped
 
-    def to_table(self, f_name=None, header=False, attrs=('time',)):
+    def to_table(self, f_name=None, header=False, attrs=None):
+
+        if attrs is None:
+            attrs = self.attributes
 
         ped_df = []
         
@@ -237,8 +240,10 @@ class Pedigree(Genealogical):
             for ts in sim.aslist():
                 t = Traversal()
                 t.graph.add_edges_from([(v, k) for k, v in ts.parent_dict.items()])
+                t.ts_node_to_ped_node = {k: v for k, v in ts_nodes_to_ped_map.items()
+                                         if k in t.graph.nodes}
                 traversals.append(t)
-            return sim, ts_nodes_to_ped_map, traversals
+            return sim, traversals
         else:
             return sim, ts_nodes_to_ped_map
 
@@ -322,7 +327,7 @@ class Pedigree(Genealogical):
 
         return ped
     
-    def sample_path(self):
+    def sample_path(self, ploidy=1):
         """
         Sample a coalescent path from a genealogy
 
@@ -334,25 +339,67 @@ class Pedigree(Genealogical):
         A `Traversal` object
         """
 
-        current_gen = set(self.probands())
+        assert ploidy in (1, 2)
+
+        tr = Traversal()
+        tr.generations = self.generations
+
         node_time = self.get_node_attributes('time')
 
-        T = Traversal()
-        T.generations = self.generations
-        T.graph.add_nodes_from(current_gen, time=0)
-        
-        for _ in range(self.generations):
-            prev_gen = set()
-            for individual in current_gen:
-                parents = self.predecessors(individual)
-                if parents:
-                    parent = rnd.choice(parents)
-                    T.graph.add_node(parent, time=node_time[parent])
-                    T.graph.add_edge(parent, individual)
-                    prev_gen.add(parent)
+        ind_to_hap = {}
 
-            current_gen = prev_gen
-        return T
+        for i, n in enumerate(self.nodes, 1):
+
+            if ploidy == 1:
+                hap_id = [i]
+            else:
+                hap_id = [2 * i - 1, 2 * i]
+
+            ind_to_hap[n] = dict(
+                zip(
+                    hap_id,
+                    rnd.choice(self.get_parents(n), 2, replace=False)
+                )
+            )
+
+        hap_to_ind = {hap: ind for ind, di in ind_to_hap.items() for hap in di.keys()}
+
+        for pid in self.probands():
+            for hap_id, parent_id in ind_to_hap[pid].items():
+
+                current_hap_id = hap_id
+                inherited_from = parent_id  # bequeathing parent
+
+                parent_hap_id = rnd.choice(list(ind_to_hap[inherited_from].keys()))
+
+                # Once you link one of the parent's haplotypes to the child's, remove
+                # the other from the dictionary (this ensures no diverging paths going
+                # backward in time):
+                ind_to_hap[inherited_from] = {k: v for k, v in ind_to_hap[inherited_from].items()
+                                              if k == parent_hap_id}
+
+                while True:
+                    tr.graph.add_edge(parent_hap_id, current_hap_id)
+
+                    current_hap_id = parent_hap_id
+                    inherited_from = ind_to_hap[inherited_from][current_hap_id]
+
+                    if inherited_from == 0:
+                        break
+                    else:
+                        parent_hap_id = rnd.choice(list(ind_to_hap[inherited_from].keys()))
+                        ind_to_hap[inherited_from] = {k: v for k, v in ind_to_hap[inherited_from].items()
+                                                      if k == parent_hap_id}
+
+        hap_to_ind = {k: v for k, v in hap_to_ind.items() if k in tr.nodes}
+        tr.ts_node_to_ped_node = hap_to_ind
+
+        # Set time attribute information:
+        nx.set_node_attributes(tr.graph,
+                               {h: node_time[i] for h, i in hap_to_ind.items()},
+                               'time')
+
+        return tr
 
     def draw(self, ax=None, figsize=(8, 6), node_color=None, labels=True,
              default_color='#2b8cbe', **kwargs):
