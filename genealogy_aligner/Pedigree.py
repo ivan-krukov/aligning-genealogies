@@ -51,6 +51,27 @@ class Pedigree(Genealogical):
         # flip!
         return dict(zip(ind_id, np.abs(depth - max(depth))))
 
+    @classmethod
+    def read_balsac(cls, fname):
+        balsac_columns = ['ind', 'father', 'mother', 'sex']
+        ped = cls()
+        ped_df = pd.read_csv(fname, sep="\t")
+        if ped_df.columns.tolist() != balsac_columns:
+            raise RuntimeError("Unexpected column headers - required format" + str(balsac_columns))
+        
+        time = Pedigree.infer_time(ped_df['ind'], ped_df['mother'], ped_df['father'])
+        ped.generations = max(time)
+
+        for i, row in ped_df.iterrows():
+            ind, pat_id, mat_id, sex = row
+            if pat_id == mat_id == 0:
+                ped.add_individual(ind, time[ind])
+            else:
+                ped.add_child(ind, pat_id, mat_id, time[ind])
+
+        return ped
+
+
     def get_parents(self, n):
 
         pred = self.predecessors(n)
