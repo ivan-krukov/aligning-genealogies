@@ -13,6 +13,7 @@ pygraphviz = "^1.5"
 pandas = "^1.0.3"
 tqdm = "^4.46.0"
 newick = "^1.0.0"
+scipy = "^1.4.1"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"
