@@ -71,7 +71,6 @@ class Pedigree(Genealogical):
 
         return ped
 
-
     def get_parents(self, n):
 
         pred = self.predecessors(n)
@@ -352,7 +351,7 @@ class Pedigree(Genealogical):
 
         return ped
     
-    def sample_path(self, probands, ploidy=1):
+    def sample_path(self, probands=None, ploidy=1):
         """
         Sample a coalescent path from a genealogy
 
@@ -365,6 +364,9 @@ class Pedigree(Genealogical):
         """
 
         assert ploidy in (1, 2)
+
+        if probands is None:
+            probands = self.probands()
 
         tr = Traversal()
         tr.generations = self.generations

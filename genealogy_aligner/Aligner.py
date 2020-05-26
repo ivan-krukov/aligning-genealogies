@@ -12,15 +12,19 @@ class Aligner(object):
 
         :param ped: A pedigree
         :param ts: A traversal object
-        :param aligned_pairs: A list of tuples of the form (n_ts, n_ped) where `n_ts` is the
-        node in the tree sequence and `n_ped` is the node in the pedigree.
         """
 
         self.ped = ped
         self.ts = ts
 
-        self.true_ts_node_to_ped_node = ts.ts_node_to_ped_node.items()
+        self.true_ts_node_to_ped_node = ts.ts_node_to_ped_node
         self.true_ped_node_to_ts_edge = ts.ped_node_to_ts_edge
+
+        self.ts_proband_to_ped_proband = {
+            n_ts: n_ped
+            for n_ts, n_ped in self.true_ts_node_to_ped_node.items()
+            if n_ts in self.ts.probands()
+        }
 
         self.pred_ts_node_to_ped_node = None
         self.pred_ped_node_to_ts_edge = None
@@ -34,8 +38,8 @@ class Aligner(object):
             raise Exception("No pairs are predicted to be aligned. Call `align` first.")
 
         metrics = {
-            'accuracy': accuracy(self.true_ts_node_to_ped_node,
-                                 self.pred_ts_node_to_ped_node)
+            'accuracy': accuracy(self.true_ts_node_to_ped_node.items(),
+                                 self.pred_ts_node_to_ped_node.items())
         }
 
         return metrics
@@ -74,7 +78,7 @@ class Aligner(object):
 
         cmap = matplotlib.cm.get_cmap(edge_color_map)
 
-        align_map = [(ts_n, ped_n) for ts_n, ped_n in align_map
+        align_map = [(ts_n, ped_n) for ts_n, ped_n in align_map.items()
                      if ped_n not in self.ped.probands()]
 
         for i, (ts_n, ped_n) in enumerate(align_map):
@@ -103,10 +107,24 @@ class DescMatchingAligner(Aligner):
         super().__init__(ped, ts)
         self.climb_up_step = climb_up_step
 
-    def align(self):
+    def get_ntps(self):
 
         ped_ntp = self.ped.get_probands_under(climb_up_step=self.climb_up_step)
         ts_ntp = self.ts.get_probands_under(climb_up_step=self.climb_up_step)
+
+        # For the intersection/union metric to work, we need to update
+        # the ts_ntp data structure with the pedigree node IDs instead
+        # of the haplotype IDs:
+
+        for n, n_set in ts_ntp.items():
+            ts_ntp[n] = set([self.ts_proband_to_ped_proband[pid]
+                             for pid in n_set])
+
+        return ped_ntp, ts_ntp
+
+    def align(self):
+
+        ped_ntp, ts_ntp = self.get_ntps()
 
         pairs = []
         scores = []
@@ -126,6 +144,56 @@ class DescMatchingAligner(Aligner):
                 pairs += [[n_ts, n_ped]]
                 scores.append(score)
 
-        self.pred_ts_node_to_ped_node = greedy_matching(np.array(pairs).T, np.array(scores))
+        self.pred_ts_node_to_ped_node = dict(
+            greedy_matching(np.array(pairs).T, np.array(scores))
+        )
+
+        return self.pred_ts_node_to_ped_node
+
+
+class IterativeMatchingAligner(DescMatchingAligner):
+
+    def __init__(self, ped, ts):
+        super().__init__(ped, ts)
+
+    def align(self):
+
+        ped_ntp, ts_ntp = self.get_ntps()
+        ped_non_proband_nodes = [n for n in self.ped.nodes
+                                 if n not in self.ped.probands()]
+
+        mapped_ts = {tsn: self.true_ts_node_to_ped_node[tsn]
+                     for tsn in self.ts.probands()}
+        unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
+
+        ts_node_time = self.ts.get_node_attributes('time')
+
+        while len(unmapped_ts) > 0:
+
+            unmapped_time = {n: ts_node_time[n] for n in unmapped_ts}
+
+            # Find the closest nodes to the mapped nodes by time difference:
+            min_t = min(unmapped_time.values())
+            closest_unmapped = [n for n in unmapped_time if ts_node_time[n] == min_t]
+
+            pairs = []
+            scores = []
+
+            for i, n_ped in enumerate(ped_non_proband_nodes):
+                for j, n_ts in enumerate(closest_unmapped):
+
+                    score = (len(ped_ntp[n_ped].intersection(ts_ntp[n_ts])) /
+                             len(ped_ntp[n_ped].union(ts_ntp[n_ts])))
+
+                    pairs += [[n_ts, n_ped]]
+                    scores.append(score)
+
+            mapped_ts.update(dict(
+                greedy_matching(np.array(pairs).T, np.array(scores))
+            ))
+
+            unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
+
+        self.pred_ts_node_to_ped_node = mapped_ts
 
         return self.pred_ts_node_to_ped_node
