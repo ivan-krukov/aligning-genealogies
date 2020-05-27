@@ -355,7 +355,7 @@ class Pedigree(Genealogical):
 
         return self.haplotypes
 
-    def sample_path(self, probands=None, ploidy=1):
+    def sample_path(self, probands=None, ploidy=2):
         """
         Sample a coalescent path from a genealogy
 
