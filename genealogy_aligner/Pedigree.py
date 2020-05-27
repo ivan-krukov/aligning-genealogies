@@ -355,7 +355,7 @@ class Pedigree(Genealogical):
 
         return self.haplotypes
 
-    def sample_path(self, probands=None, ploidy=2):
+    def sample_path(self, probands=None, ploidy=1):
         """
         Sample a coalescent path from a genealogy
 
@@ -366,8 +366,6 @@ class Pedigree(Genealogical):
         --------
         A `Traversal` object
         """
-
-        assert ploidy in (1, 2)
 
         if probands is None:
             probands = self.probands()
