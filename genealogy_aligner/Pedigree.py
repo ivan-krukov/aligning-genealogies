@@ -9,9 +9,14 @@ import matplotlib.pyplot as plt
 
 from .Genealogical import Genealogical
 from .Traversal import Traversal
+from .Haplotype import Haplotype
 
 
 class Pedigree(Genealogical):
+
+    def __init__(self, graph=None):
+        super().__init__(graph)
+        self.haplotypes = None
     
     def add_couple(self, mat_id, pat_id, time):
         self.graph.add_node(mat_id, time=time)
@@ -50,26 +55,6 @@ class Pedigree(Genealogical):
 
         # flip!
         return dict(zip(ind_id, np.abs(depth - max(depth))))
-
-    @classmethod
-    def read_balsac(cls, fname):
-        balsac_columns = ['ind', 'father', 'mother', 'sex']
-        ped = cls()
-        ped_df = pd.read_csv(fname, sep="\t")
-        if ped_df.columns.tolist() != balsac_columns:
-            raise RuntimeError("Unexpected column headers - required format" + str(balsac_columns))
-        
-        time = Pedigree.infer_time(ped_df['ind'], ped_df['mother'], ped_df['father'])
-        ped.generations = max(time)
-
-        for i, row in ped_df.iterrows():
-            ind, pat_id, mat_id, sex = row
-            if pat_id == mat_id == 0:
-                ped.add_individual(ind, time[ind])
-            else:
-                ped.add_child(ind, pat_id, mat_id, time[ind])
-
-        return ped
 
     def get_parents(self, n):
 
@@ -350,7 +335,26 @@ class Pedigree(Genealogical):
             ped.graph = nx.subgraph(ped.graph, largest)
 
         return ped
-    
+
+    def get_haplotypes(self, ploidy=2):
+
+        assert ploidy in (1, 2)
+
+        self.haplotypes = {}
+
+        for i, n in enumerate(self.nodes, 1):
+            if ploidy == 2:
+                self.haplotypes[n] = [
+                    Haplotype(2 * i - 1, n),
+                    Haplotype(2 * i, n)
+                ]
+            else:
+                self.haplotypes[n] = [
+                    Haplotype(i, n)
+                ]
+
+        return self.haplotypes
+
     def sample_path(self, probands=None, ploidy=1):
         """
         Sample a coalescent path from a genealogy
@@ -371,57 +375,45 @@ class Pedigree(Genealogical):
         tr = Traversal()
         tr.generations = self.generations
 
-        node_time = self.get_node_attributes('time')
+        # Obtain the haplotype data structure:
+        hap_struct = self.get_haplotypes(ploidy)
+        hap_to_ind = {}
 
-        ind_to_hap = {}
-
+        # For all the nodes in the pedigree:
         for i, n in enumerate(self.nodes, 1):
 
-            if ploidy == 1:
-                hap_id = [i]
-            else:
-                hap_id = [2 * i - 1, 2 * i]
+            # For all the haplotypes assigned to each node,
+            # randomly pair them with the parents (without
+            # replacement).
+            for hap_obj, parent in zip(
+                    hap_struct[n],
+                    rnd.choice(self.get_parents(n), 2, replace=False)):
 
-            ind_to_hap[n] = dict(
-                zip(
-                    hap_id,
-                    rnd.choice(self.get_parents(n), 2, replace=False)
-                )
-            )
+                # If the parent is a node in the pedigree:
+                if parent != 0:
+                    # If the given haplotype hasn't been linked to a haplotype
+                    # the parent, assign randomly from the parent's 2 copies:
+                    if hap_obj.parent_haplotype is None:
+                        hap_obj.parent_haplotype = rnd.choice(hap_struct[parent])
 
-        hap_to_ind = {hap: ind for ind, di in ind_to_hap.items() for hap in di.keys()}
+                    tr.graph.add_edge(hap_obj.parent_haplotype.id, hap_obj.id)
 
-        for pid in probands:
-            for hap_id, parent_id in ind_to_hap[pid].items():
+                hap_to_ind[hap_obj.id] = hap_obj.individual_id
 
-                current_hap_id = hap_id
-                inherited_from = parent_id  # bequeathing parent
+        # Trim paths that end at non-proband haplotypes:
+        non_proband_terminals = [n for n in tr.probands(use_time=False)
+                                 if hap_to_ind[n] not in probands]
+        while len(non_proband_terminals) > 0:
+            tr.graph.remove_nodes_from(non_proband_terminals)
+            non_proband_terminals = [n for n in tr.probands(use_time=False)
+                                     if hap_to_ind[n] not in probands]
 
-                parent_hap_id = rnd.choice(list(ind_to_hap[inherited_from].keys()))
-
-                # Once you link one of the parent's haplotypes to the child's, remove
-                # the other from the dictionary (this ensures no diverging paths going
-                # backward in time):
-                ind_to_hap[inherited_from] = {k: v for k, v in ind_to_hap[inherited_from].items()
-                                              if k == parent_hap_id}
-
-                while True:
-                    tr.graph.add_edge(parent_hap_id, current_hap_id)
-
-                    current_hap_id = parent_hap_id
-                    inherited_from = ind_to_hap[inherited_from][current_hap_id]
-
-                    if inherited_from == 0:
-                        break
-                    else:
-                        parent_hap_id = rnd.choice(list(ind_to_hap[inherited_from].keys()))
-                        ind_to_hap[inherited_from] = {k: v for k, v in ind_to_hap[inherited_from].items()
-                                                      if k == parent_hap_id}
-
+        # Assign the 'haplotype to individual' dictionary to the traversal object:
         hap_to_ind = {k: v for k, v in hap_to_ind.items() if k in tr.nodes}
         tr.ts_node_to_ped_node = hap_to_ind
 
         # Set time attribute information:
+        node_time = self.get_node_attributes('time')
         nx.set_node_attributes(tr.graph,
                                {h: node_time[i] for h, i in hap_to_ind.items()},
                                'time')
