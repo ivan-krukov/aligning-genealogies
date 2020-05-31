@@ -1,3 +1,4 @@
+from gensim.models.poincare import PoincareModel
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -17,13 +18,18 @@ class Aligner(object):
         self.ped = ped
         self.ts = ts
 
+        self.ped_probands = self.ped.probands()
+        self.ped_nonprobands = list(set(self.ped.nodes) - set(self.ped_probands))
+        self.ts_probands = self.ts.probands()
+        self.ts_nonprobands = list(set(self.ts.nodes) - set(self.ts_probands))
+
         self.true_ts_node_to_ped_node = ts.ts_node_to_ped_node
         self.true_ped_node_to_ts_edge = ts.ped_node_to_ts_edge
 
         self.ts_proband_to_ped_proband = {
             n_ts: n_ped
             for n_ts, n_ped in self.true_ts_node_to_ped_node.items()
-            if n_ts in self.ts.probands()
+            if n_ts in self.ts_probands
         }
 
         self.pred_ts_node_to_ped_node = None
@@ -79,7 +85,7 @@ class Aligner(object):
         cmap = matplotlib.cm.get_cmap(edge_color_map)
 
         align_map = [(ts_n, ped_n) for ts_n, ped_n in align_map.items()
-                     if ped_n not in self.ped.probands()]
+                     if ped_n not in self.ped_probands]
 
         for i, (ts_n, ped_n) in enumerate(align_map):
             # 2. Transform arrow start point from axis 0 to figure coordinates
@@ -97,14 +103,58 @@ class Aligner(object):
             fig.patches.append(arrow)
 
 
-class DescMatchingAligner(Aligner):
+class MatchingAligner(Aligner):
     """
-    Descendant Matching Aligner: Aligns nodes based on similarity of their
-    sets of descendants (probands).
+    This is the parent class for all matching Aligners.
+    It implements the `match` method, which serves as the main
+    step in the discrete alignment process.
     """
 
-    def __init__(self, ped, ts, climb_up_step=0):
+    def __init__(self, ped, ts):
         super().__init__(ped, ts)
+
+    @staticmethod
+    def match(ped_dict, ts_dict):
+        """
+        The match method takes 2 dictionaries from the
+        pedigree and tree sequence graphs.
+        Each dictionary consists of the following key and value pairs
+        * key: The key is the name of the non-aligned node
+        * value: A set of the closest aligned nodes to it. What is
+        meant by 'closest' and how many items in the set are left
+        for the child classes to decide.
+
+        For the matching to work, ensure that the set of closest
+        haplotypes in the tree sequence dictionary are mapped
+        to the corresponding subjects
+        using the self.ts_proband_to_ped_proband dictionary.
+
+        :param ped_dict: Pedigree dictionary
+        :param ts_dict: Tree sequence dictionary
+        :return:
+        """
+
+        pairs = []
+        scores = []
+
+        for n_ped, n_ped_el in ped_dict.items():
+            for n_ts, n_ts_el in ts_dict.items():
+                score = (len(n_ped_el.intersection(n_ts_el)) /
+                         len(n_ped_el.union(n_ts_el)))
+
+                pairs += [[n_ts, n_ped]]
+                scores.append(score)
+
+        return dict(
+            greedy_matching(np.array(pairs).T, np.array(scores))
+        )
+
+
+class DescMatchingAligner(MatchingAligner):
+
+    def __init__(self, ped, ts, iterative=True, climb_up_step=0):
+        super().__init__(ped, ts)
+        self.iterative = iterative
         self.climb_up_step = climb_up_step
 
     def get_ntps(self):
@@ -126,71 +176,82 @@ class DescMatchingAligner(Aligner):
 
         ped_ntp, ts_ntp = self.get_ntps()
 
-        pairs = []
-        scores = []
-
-        ped_prob = self.ped.probands()
-        ts_prob = self.ts.probands()
-
-        for i, n_ped in enumerate(self.ped.nodes):
-            for j, n_ts in enumerate(self.ts.nodes):
-
-                if n_ped in ped_prob or n_ts in ts_prob:
-                    continue
-
-                score = (len(ped_ntp[n_ped].intersection(ts_ntp[n_ts])) /
-                         len(ped_ntp[n_ped].union(ts_ntp[n_ts])))
-
-                pairs += [[n_ts, n_ped]]
-                scores.append(score)
-
-        self.pred_ts_node_to_ped_node = dict(
-            greedy_matching(np.array(pairs).T, np.array(scores))
-        )
-
-        return self.pred_ts_node_to_ped_node
-
-
-class IterativeMatchingAligner(DescMatchingAligner):
-
-    def __init__(self, ped, ts):
-        super().__init__(ped, ts)
-
-    def align(self):
-
-        ped_ntp, ts_ntp = self.get_ntps()
-        ped_non_proband_nodes = [n for n in self.ped.nodes
-                                 if n not in self.ped.probands()]
-
         mapped_ts = {tsn: self.true_ts_node_to_ped_node[tsn]
-                     for tsn in self.ts.probands()}
-        unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
+                     for tsn in self.ts_probands}
+        unmapped_ts = self.ts_nonprobands
 
         ts_node_time = self.ts.get_node_attributes('time')
 
         while len(unmapped_ts) > 0:
 
-            unmapped_time = {n: ts_node_time[n] for n in unmapped_ts}
+            if self.iterative:
+                # Find the closest nodes to the mapped nodes by time difference:
+                unmapped_time = {n: ts_node_time[n] for n in unmapped_ts}
+                min_t = min(unmapped_time.values())
+                closest_unmapped = [n for n in unmapped_time if ts_node_time[n] == min_t]
+            else:
+                closest_unmapped = unmapped_ts
 
-            # Find the closest nodes to the mapped nodes by time difference:
-            min_t = min(unmapped_time.values())
-            closest_unmapped = [n for n in unmapped_time if ts_node_time[n] == min_t]
+            mapped_ts.update(
+                self.match(
+                    {n_ped: ped_ntp[n_ped] for n_ped in self.ped_nonprobands},
+                    {n_ts: ts_ntp[n_ts] for n_ts in closest_unmapped}
+                )
+            )
 
-            pairs = []
-            scores = []
+            unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
 
-            for i, n_ped in enumerate(ped_non_proband_nodes):
-                for j, n_ts in enumerate(closest_unmapped):
+        self.pred_ts_node_to_ped_node = mapped_ts
 
-                    score = (len(ped_ntp[n_ped].intersection(ts_ntp[n_ts])) /
-                             len(ped_ntp[n_ped].union(ts_ntp[n_ts])))
+        return self.pred_ts_node_to_ped_node
 
-                    pairs += [[n_ts, n_ped]]
-                    scores.append(score)
 
-            mapped_ts.update(dict(
-                greedy_matching(np.array(pairs).T, np.array(scores))
-            ))
+class PoincareAligner(MatchingAligner):
+
+    def __init__(self, ped, ts, iterative=True, size=10, k=5):
+        super().__init__(ped, ts)
+        self.iterative = True
+        self.size = size
+        self.k = k
+
+    def align(self):
+
+        ped_model = PoincareModel(self.ped.edges, size=self.size, negative=2)
+        ts_model = PoincareModel(self.ts.edges, size=self.size, negative=2)
+
+        mapped_ts = {tsn: self.true_ts_node_to_ped_node[tsn]
+                     for tsn in self.ts_probands}
+        unmapped_ts = self.ts_nonprobands
+
+        ts_node_time = self.ts.get_node_attributes('time')
+
+        while len(unmapped_ts) > 0:
+
+            if self.iterative:
+                # Find the closest nodes to the mapped nodes by time difference:
+                unmapped_time = {n: ts_node_time[n] for n in unmapped_ts}
+                min_t = min(unmapped_time.values())
+                closest_unmapped = [n for n in unmapped_time if ts_node_time[n] == min_t]
+            else:
+                closest_unmapped = unmapped_ts
+
+            ped_sim = {n: set(sorted(self.ped_probands,
+                                     key=lambda k: ped_model.kv.similarity(k, n),
+                                     reverse=True)[:self.k])
+                       for n in self.ped_nonprobands}
+            ts_sim = {n: sorted(self.ts_probands,
+                                key=lambda k: ts_model.kv.similarity(k, n),
+                                reverse=True)[:self.k]
+                      for n in closest_unmapped}
+
+            ts_sim = {k: set([self.ts_proband_to_ped_proband[i] for i in v])
+                      for k, v in ts_sim.items()}
+
+            mapped_ts.update(
+                self.match(
+                    ped_sim, ts_sim
+                )
+            )
 
             unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
 
