@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from .Genealogical import Genealogical
 from .Traversal import Traversal
 from .Haplotype import Haplotype
+from .utils import integer_dict
 
 
 class Pedigree(Genealogical):
@@ -48,6 +49,19 @@ class Pedigree(Genealogical):
                 depth[child] = d + 1
 
         return depth
+
+
+    @staticmethod
+    def infer_sex(ind_id, pat_id, mat_id):
+        male = np.isin(ind_id, pat_id)
+        female = np.isin(ind_id, mat_id)
+        unknown = ~(male | female)
+        sex = np.zeros_like(ind_id)
+        sex[male] = 1
+        sex[female] = 2
+        # TODO: should this be `0`?
+        sex[unknown] = -1
+        return sex
     
     @staticmethod
     def infer_time_old(ind_id, pat_id, mat_id):
@@ -133,7 +147,8 @@ class Pedigree(Genealogical):
             else:
                 ped.add_child(ind, pat_id, mat_id, time[ind])
 
-        nx.set_node_attributes(ped.graph, ped.infer_depth(), 'depht')
+        nx.set_node_attributes(ped.graph, integer_dict(ped.infer_depth()), 'depth')
+        nx.set_node_attributes(ped.graph, integer_dict(ped_df.sex), 'sex')
         
         return ped
     

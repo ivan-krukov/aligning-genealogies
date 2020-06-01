@@ -1,10 +1,15 @@
 from genealogy_aligner import Pedigree
 from genealogy_aligner.utils import integer_dict
+import pandas as pd
+from itertools import repeat
 import pytest
 
 
 def get_test_pedigree(name):
     return Pedigree.read_balsac("data/test/" + name + ".tsv")
+
+def get_test_pedigree_table(name):
+    return pd.read_table("data/test/" + name + ".tsv")
 
 
 @pytest.mark.parametrize(
@@ -63,4 +68,19 @@ def test_depth(pedigree, depth):
     ],
 )
 def test_depth_backward(pedigree, depth):
-    assert  integer_dict(depth) == get_test_pedigree(pedigree).infer_depth(forward=False)
+    assert integer_dict(depth) == get_test_pedigree(pedigree).infer_depth(forward=False)
+
+    
+@pytest.mark.parametrize('pedigree', ['simple', 'disconnected', 'multiple_founder'])
+def test_sex(pedigree):
+    ped_df = get_test_pedigree_table(pedigree)
+    
+    ped = get_test_pedigree(pedigree)
+    inferred_sex = Pedigree.infer_sex(ped_df.individual.values, ped_df.father.values, ped_df.mother.values)
+    
+    expected_sex = ped.get_node_attr('sex')
+    # we can't infer the sex of probands
+    mask = dict(zip(ped.probands(), repeat(-1)))
+    expected_sex.update(mask)
+    assert integer_dict(inferred_sex) == expected_sex
+    
