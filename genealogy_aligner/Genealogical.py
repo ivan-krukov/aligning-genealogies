@@ -82,23 +82,45 @@ class Genealogical(object):
     def get_individuals_at_generation(self, k):
         return self.filter_nodes(lambda node, data: data['time'] == k)
 
+
+    def founders_view(self):
+        G = self.graph
+        return nx.subgraph_view(G, lambda n: not any(G.predecessors(n)))
+
     def founders(self):
         """
         Get a list of nodes that don't have predecessors
-        :return:
         """
-        return self.filter_nodes(
-            lambda node, data: len(self.predecessors(node)) == 0
-        )
+        return list(self.founders_view().nodes)
 
-    def probands(self, use_time=True):
-        """Get a list of individuals at present day"""
-        if use_time:
-            return self.get_individuals_at_generation(0)
-        else:
-            return self.filter_nodes(
-                lambda node, data: len(self.successors(node)) == 0
-            )
+    def probands_view(self):
+        G = self.graph
+        return nx.subgraph_view(G, lambda n: not any(G.successors(n)))
+        
+    def probands(self):
+        """Get a list of individuals with no children"""
+        return list(self.probands_view().nodes)
+
+    
+    def iter_edges(self, source=None, forward=True):
+        if (source is None) and forward:
+            source = self.founders_view().nodes
+        elif (source is None) and (not forward):
+            source = self.probands_view().nodes
+
+        neighbors = self.graph.successors if forward else self.graph.predecessors
+        
+        curr_gen = set(source)
+        next_gen = set()
+
+        while curr_gen:
+            for node in curr_gen:
+                for neighbor in neighbors(node):
+                    yield node, neighbor
+                    next_gen.add(neighbor)
+            curr_gen = next_gen
+            next_gen = set()
+
 
     def get_probands_under(self, nodes=None, climb_up_step=0):
 

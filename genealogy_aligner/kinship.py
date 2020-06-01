@@ -28,11 +28,10 @@ def kinship_matrix(ind_id, mat_id, pat_id, depth):
 
     # flip!
     depth = np.abs(depth - max(depth))
-    for d in range(1, max(depth)+1):
+    for d in tqdm(range(1, max(depth)+1)):
         idx = np.flatnonzero(depth == d) 
         K[idx, :] = (K[m[idx], :] + K[p[idx], :]) / 2
         K[:, idx] = (K[:, m[idx]] + K[:, p[idx]]) / 2
-        for j in idx:
-            K[j,j] = (1 + K[m[j], p[j]]) / 2
+        K[idx,idx] = (1 + K[m[idx], p[idx]]) / 2
 
     return K[:-1,:-1]

@@ -2,7 +2,7 @@ from genealogy_aligner import Pedigree
 
 print("Simulating from a random pedigree...")
 ped = Pedigree.simulate_from_founders(10, 10, 2, 1)
-probands = ped.probands(use_time=False)
+probands = ped.probands()
 sim = ped.generate_msprime_simulations(model_after=None)
 
 print("Simulating from geneaJi pedigree...")
@@ -17,7 +17,7 @@ sp_sim = sample_ped.generate_msprime_simulations(model_after=None)
 
 print("Simulating from BALSAC pedigree...")
 balsac = Pedigree.from_table('../data/balsac.tsv', header=True)
-bprobands = balsac.probands(use_time=False)
+bprobands = balsac.probands()
 bsim = balsac.generate_msprime_simulations(model_after=None)
 
 print("Done!")

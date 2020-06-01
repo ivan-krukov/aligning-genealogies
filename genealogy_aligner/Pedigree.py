@@ -1,6 +1,7 @@
 import networkx as nx
 import msprime as msp
 from itertools import count
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -30,8 +31,44 @@ class Pedigree(Genealogical):
         self.graph.add_edge(mat_id, child_id)
         self.graph.add_edge(pat_id, child_id)
 
+    def get_node_attr(self, attr):
+        return nx.get_node_attributes(self.graph, attr)
+
+
+    def infer_depth(self):
+        """Infer depth of each node - return as dict
+        Founders (nodes without parents) have depth 0
+        Each child: 1 + max(parental_depth)"""
+        depth = defaultdict(int)
+        curr_gen = self.founders()
+        next_gen = set()
+        for node in curr_gen:
+            d = depth[node] # 0 by default
+            for child in self.graph.successors(node):
+                next_gen.add(child)
+                if depth[child] <= d:
+                    depth[child] = d + 1
+            curr_gen = next_gen
+            next_gen = set()
+        return depth
+
+
+    def infer_coal_time(self):
+        """Infer time for each node - return as dict
+        Probands (nodes without children) have time 0
+        Each parent: 1 + max(children_depth)"""
+        time = defaultdict(int)
+        print(dict(self.graph.pred))
+        for node, predecessors in self.graph.pred.items():
+            d = time[node] # 0 by default
+            for parent in predecessors:
+                if time[parent] <= d:
+                    time[parent] = d + 1
+        return time
+
+    
     @staticmethod
-    def infer_time(ind_id, pat_id, mat_id):
+    def infer_time_old(ind_id, pat_id, mat_id):
         n = len(ind_id)
         assert n == len(mat_id)
         assert n == len(pat_id)
@@ -82,7 +119,7 @@ class Pedigree(Genealogical):
                 pred_sex = [self.get_node_attributes('sex', p) for p in pred]
 
                 if pred_sex[0] == 1 or pred_sex[1] == 2:
-                    father, mother = pred
+                    fathepr, mother = pred
                 elif pred_sex[0] == 2 or pred_sex[1] == 1:
                     father, mother = pred[::-1]
                 else:
@@ -94,23 +131,50 @@ class Pedigree(Genealogical):
 
         return father, mother
 
+
     @classmethod
-    def from_table(cls, f_name, attrs=('time',),
+    def read_balsac(cls, fname):
+        balsac_columns = ['individual', 'father', 'mother', 'sex']
+        ped = cls()
+        ped_df = pd.read_table(fname)
+        if ped_df.columns.tolist() != balsac_columns:
+            raise RuntimeError("Unexpected column headers - required format" + str(balsac_columns))
+
+        time = Pedigree.infer_time_old(ped_df['individual'], ped_df['mother'], ped_df['father'])
+        ped.generations = max(time)
+        
+
+        for i, row in ped_df.iterrows():
+            ind, pat_id, mat_id, sex = row
+            if pat_id == mat_id == 0:
+                ped.add_individual(ind, time[ind])
+            else:
+                ped.add_child(ind, pat_id, mat_id, time[ind])
+
+        nx.set_node_attributes(ped.graph, ped.infer_depth(), 'depht')
+        
+        return ped
+    
+
+    @classmethod
+    def from_table(cls, f_name, attrs=['time'],
                    header=False, check_2_parents=True):
 
         ped = cls()
+        required_columns = ["individual", "father", "mother"]
 
         if header:
             ped_df = pd.read_csv(f_name, sep="\t")
-            attrs = list(ped_df.columns[3:])
-            ped_df.columns = ["individual", "father", "mother"] + attrs
+            attrs = ped_df.columns[3:]
+            ped_df.columns = required_columns + attrs
         else:
             ped_df = pd.read_csv(f_name, sep="\t",
-                                 names=["individual", "father", "mother"] + list(attrs))
+                                 names= required_columns + attrs)
 
         # -------------------------------------------------------
         # Checking validity of table:
 
+        # TODO: ID of 0 is special in BALSAC
         if check_2_parents:
             cond = (
                     ((ped_df['father'] == 0) & (ped_df['mother'] != 0)) |
@@ -139,10 +203,11 @@ class Pedigree(Genealogical):
         # Adding inferred time if not in attribute list:
         if 'time' not in attrs:
             nx.set_node_attributes(ped.graph,
-                                   Pedigree.infer_time(ped_df['individual'],
+                                   Pedigree.infer_time_old(ped_df['individual'],
                                                        ped_df['father'],
                                                        ped_df['mother']),
                                    'time')
+        ped.infer_depth()
 
         # Adding inferred sex if not in attribute list:
         if 'sex' not in attrs:
@@ -399,11 +464,11 @@ class Pedigree(Genealogical):
                 hap_to_ind[hap_obj.id] = hap_obj.individual_id
 
         # Trim paths that end at non-proband haplotypes:
-        non_proband_terminals = [n for n in tr.probands(use_time=False)
+        non_proband_terminals = [n for n in tr.probands()
                                  if hap_to_ind[n] not in probands]
         while len(non_proband_terminals) > 0:
             tr.graph.remove_nodes_from(non_proband_terminals)
-            non_proband_terminals = [n for n in tr.probands(use_time=False)
+            non_proband_terminals = [n for n in tr.probands()
                                      if hap_to_ind[n] not in probands]
 
         # Assign the 'haplotype to individual' dictionary to the traversal object:

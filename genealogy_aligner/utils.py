@@ -3,6 +3,14 @@ import numpy as np
 import pandas as pd
 
 
+def integer_dict(values, start=1):
+    """Dict of `values` with keys in the integer range.
+    Keys from `start` to `len(values)+start`, inclusive """
+
+    n = len(values)
+    return dict(zip(range(start, n + start), values))
+
+
 def soft_ordering(total_edge_index, sim_scores):
 
     df = pd.DataFrame(np.concatenate((total_edge_index, sim_scores.reshape(1, -1))).T,
