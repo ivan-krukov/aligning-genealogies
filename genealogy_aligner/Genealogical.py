@@ -102,7 +102,26 @@ class Genealogical(object):
         return list(self.probands_view().nodes)
 
     
-    def iter_edges(self, source=None, forward=True):
+    def iter_edges(self, forward=True, source=None):
+        """Iterates edges in a breadth-first-search
+        Yields a pair of `(node, neighbor)`
+        For `forward=True` iteration, start at founders (nodes with no predecessors), and yield `(node, child)` pairs
+        For `forward=False` iteration, start at probands (nodes with no successors), and yeild `(node, parent)` pairs.
+        Optional `source` argument can be used to specify the starting nodes
+        
+        Parameters
+        ----------
+        forward: boolean
+            Direction of iteration:
+            - `Forward=True` - from parents to children, yielding `(node, child)` pairs
+            - `Forward=False` - from children to parents, , yielding `(node, parent)` pairs
+        source: [int]
+            Iterable of node IDs to initialize the iteration. By default, direction-specific source nodes are chosen
+        
+        Yields
+        -------
+        pair of `(node, neighbor)` node IDs, for each edge
+        """
         if (source is None) and forward:
             source = self.founders_view().nodes
         elif (source is None) and (not forward):
