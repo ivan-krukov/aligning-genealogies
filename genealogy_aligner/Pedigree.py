@@ -34,38 +34,20 @@ class Pedigree(Genealogical):
     def get_node_attr(self, attr):
         return nx.get_node_attributes(self.graph, attr)
 
-
-    def infer_depth(self):
+    def infer_depth(self, forward = True):
         """Infer depth of each node - return as dict
         Founders (nodes without parents) have depth 0
         Each child: 1 + max(parental_depth)"""
         depth = defaultdict(int)
-        curr_gen = self.founders()
-        next_gen = set()
-        for node in curr_gen:
-            d = depth[node] # 0 by default
-            for child in self.graph.successors(node):
-                next_gen.add(child)
-                if depth[child] <= d:
-                    depth[child] = d + 1
-            curr_gen = next_gen
-            next_gen = set()
+        # iteration starts at founders (no parents) if forward==True
+        # if forward==False, start at probands (no children)
+        # this is in the first (default) argument to iter_edges()
+        for node, child in self.iter_edges(forward=forward):
+            d = depth[node]            
+            if depth[child] <= d:
+                depth[child] = d + 1
+
         return depth
-
-
-    def infer_coal_time(self):
-        """Infer time for each node - return as dict
-        Probands (nodes without children) have time 0
-        Each parent: 1 + max(children_depth)"""
-        time = defaultdict(int)
-        print(dict(self.graph.pred))
-        for node, predecessors in self.graph.pred.items():
-            d = time[node] # 0 by default
-            for parent in predecessors:
-                if time[parent] <= d:
-                    time[parent] = d + 1
-        return time
-
     
     @staticmethod
     def infer_time_old(ind_id, pat_id, mat_id):
