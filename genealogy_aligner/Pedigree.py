@@ -1,7 +1,9 @@
 import networkx as nx
 import msprime as msp
+from tqdm import tqdm
 from itertools import count
 from collections import defaultdict
+from scipy.sparse import dok_matrix
 
 import numpy as np
 import pandas as pd
@@ -49,6 +51,56 @@ class Pedigree(Genealogical):
                 depth[child] = d + 1
 
         return depth
+
+    def kinship_traversal(self):
+        G = self.graph
+        dim = max(G.nodes) + 1
+        K = dok_matrix((dim, dim))
+
+        founders = self.founders_view()
+
+        depth = self.infer_depth()
+
+        def ordering(node):
+            return depth[node]
+
+        relatives = {}
+        descendants = []
+        seen_descendants = set()
+
+        for founder in tqdm(founders, mininterval=5):
+            K[founder, founder] = 0.5
+            
+            bfs = self.iter_edges(source=[founder])
+            # traversal = sorted([child for _, child in bfs], key=ordering)
+            traversal = [child for _, child in bfs]
+
+            for i, descendant in enumerate(traversal):
+                if descendant not in seen_descendants:
+                    seen_descendants.add(descendant)
+                    relatives[descendant] = traversal[i+1:]
+                    descendants.append(descendant)
+
+            for child in traversal:
+                p, q = G.predecessors(child)
+                kinship = (K[founder, p] + K[founder, q])/2
+                K[founder, child] = kinship
+                K[child, founder] = kinship
+
+        
+        descendants = sorted(descendants, key=ordering)
+        
+        for descendant in tqdm(descendants, mininterval=5):
+            p, q = G.predecessors(descendant)
+            K[descendant, descendant] = 0.5 + K[p, q]
+
+            for relative in relatives[descendant]:
+                p, q = G.predecessors(relative)
+                kinship = (K[descendant, p] + K[descendant, q])/2
+                K[descendant, relative] = kinship
+                K[relative, descendant] = kinship
+
+        return K
 
 
     @staticmethod

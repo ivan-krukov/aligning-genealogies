@@ -1,6 +1,8 @@
 from genealogy_aligner import Pedigree
+from genealogy_aligner.kinship import kinship_matrix, kinship_traversal
 from genealogy_aligner.utils import integer_dict
 import pandas as pd
+import numpy as np
 from itertools import repeat
 import pytest
 
@@ -74,7 +76,6 @@ def test_depth_backward(pedigree, depth):
 @pytest.mark.parametrize('pedigree', ['simple', 'disconnected', 'multiple_founder'])
 def test_sex(pedigree):
     ped_df = get_test_pedigree_table(pedigree)
-    
     ped = get_test_pedigree(pedigree)
     inferred_sex = Pedigree.infer_sex(ped_df.individual.values, ped_df.father.values, ped_df.mother.values)
     
@@ -84,3 +85,17 @@ def test_sex(pedigree):
     expected_sex.update(mask)
     assert integer_dict(inferred_sex) == expected_sex
     
+
+@pytest.mark.parametrize('pedigree', ['simple', 'disconnected', 'multiple_founder'])
+def test_kinship_calculation(pedigree):
+    ped_df = get_test_pedigree_table(pedigree)
+    ped = get_test_pedigree(pedigree)
+    depth = ped.infer_depth()
+    l = ped.n_individuals
+    darray = np.array([depth[i] for i in range(1,l+1)])
+
+    K_genlib = kinship_matrix(ped_df.individual, ped_df.mother, ped_df.father, darray)
+    K_traversal = ped.kinship_traversal().todense()[1:, 1:]
+
+    #print(K_genlib - K_traversal)
+    assert np.allclose(K_genlib, K_traversal)
