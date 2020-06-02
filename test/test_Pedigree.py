@@ -20,6 +20,7 @@ def get_test_pedigree_table(name):
         ("simple", [1, 2, 3, 6]),
         ("disconnected", [1, 2, 3, 4, 5, 7]),
         ("multiple_founder", [1, 2, 3, 4, 6, 7]),
+        ('proband_different_generations', [1, 2, 4, 5])
     ],
 )
 def test_founders(pedigree, founders):
@@ -28,7 +29,8 @@ def test_founders(pedigree, founders):
 
 @pytest.mark.parametrize(
     "pedigree,probands",
-    [("simple", [7, 8]), ("disconnected", [9, 10]), ("multiple_founder", [11, 12]),],
+    [("simple", [7, 8]), ("disconnected", [9, 10]), ("multiple_founder", [11, 12]),
+            ('proband_different_generations', [7, 8])],
 )
 def test_probands(pedigree, probands):
     assert probands == get_test_pedigree(pedigree).probands()
@@ -56,6 +58,7 @@ def test_iter_edges_backward(pedigree, bfs_bwd):
         ("simple", [0, 0, 0, 1, 1, 0, 2, 2]),
         ("disconnected", [0, 0, 0, 0, 0, 1, 0, 1, 2, 2]),
         ("multiple_founder", [0, 0, 0, 0, 1, 0, 0, 1, 2, 2, 3, 3]),
+        ('proband_different_generations', [0, 0, 1, 0, 0, 2, 2, 3])
     ],
 )
 def test_depth(pedigree, depth):
@@ -67,13 +70,14 @@ def test_depth(pedigree, depth):
     [
         ("simple", [2, 2, 1, 1, 1, 1, 0, 0]),
         ("multiple_founder", [3, 3, 3, 3, 2, 2, 2, 2, 1, 1, 0, 0]),
+        ('proband_different_generations', [3, 3, 2, 2, 1, 1, 0, 0])
     ],
 )
 def test_depth_backward(pedigree, depth):
     assert integer_dict(depth) == get_test_pedigree(pedigree).infer_depth(forward=False)
 
     
-@pytest.mark.parametrize('pedigree', ['simple', 'disconnected', 'multiple_founder'])
+@pytest.mark.parametrize('pedigree', ['simple', 'disconnected', 'multiple_founder', 'proband_different_generations'])
 def test_sex(pedigree):
     ped_df = get_test_pedigree_table(pedigree)
     ped = get_test_pedigree(pedigree)
@@ -86,7 +90,7 @@ def test_sex(pedigree):
     assert integer_dict(inferred_sex) == expected_sex
     
 
-@pytest.mark.parametrize('pedigree', ['simple', 'disconnected', 'multiple_founder'])
+@pytest.mark.parametrize('pedigree', ['simple', 'disconnected', 'multiple_founder', 'proband_different_generations'])
 def test_kinship_calculation(pedigree):
     ped_df = get_test_pedigree_table(pedigree)
     ped = get_test_pedigree(pedigree)
@@ -96,6 +100,8 @@ def test_kinship_calculation(pedigree):
 
     K_genlib = kinship_matrix(ped_df.individual, ped_df.mother, ped_df.father, darray)
     K_traversal = ped.kinship_traversal().todense()[1:, 1:]
+    
 
     #print(K_genlib - K_traversal)
-    assert np.allclose(K_genlib, K_traversal)
+    # note that we're using a the upper triangular matrix here
+    assert np.allclose(np.triu(K_genlib), K_traversal)
