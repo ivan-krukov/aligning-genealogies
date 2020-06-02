@@ -2,3 +2,4 @@
 /cached/
 **/__pycache__/
 poetry.lock
+.ipynb_checkpoints
