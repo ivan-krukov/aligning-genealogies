@@ -53,62 +53,38 @@ class Pedigree(Genealogical):
 
         return depth
 
-    def kinship_traversal(self, founders_only=False, progress=True):
+    def kinship_lange(self):
         G = self.graph
-        dim = max(G.nodes) + 1
-        K = dok_matrix((dim, dim))
-
-        founders = self.founders_view()
-
+        label_gen = count(0)
         depth = self.infer_depth()
+        ordered_label = sorted(G.nodes, key=lambda n: depth[n])
+        ordered_index = [next(label_gen) for n in ordered_label]
+        
+        index_to_label = dict(zip(ordered_index, ordered_label))
+        label_to_index = dict(zip(ordered_label, ordered_index))
 
-        def ordering(node):
-            return depth[node]
+        n = len(G.nodes)
+        K = np.zeros((n,n), dtype=float)
 
-        relatives = defaultdict(set)
-        descendants = set()        
+        for node_idx in tqdm(range(n)):
+            node = index_to_label[node_idx]
+            if any(G.predecessors(node)):
+                mother, father = G.predecessors(node)
+                mat_idx, pat_idx = label_to_index[mother], label_to_index[father]
+                K[node_idx, node_idx] = 0.5 + (K[mat_idx, pat_idx]/2)
+            else:
+                K[node_idx, node_idx] = 0.5
+               
+            for relative_idx in range(node_idx+1, n):
+                relative = index_to_label[relative_idx]
+                if any(G.predecessors(relative)):
+                    mother, father = G.predecessors(relative)
+                    mat_idx, pat_idx = label_to_index[mother], label_to_index[father]
+                    v = (K[node_idx, mat_idx]/2) + (K[node_idx, pat_idx]/2)
+                    K[node_idx, relative_idx] = v
+                    K[relative_idx, node_idx] = v
 
-        if progress:
-            step = "(1/1)" if founders_only else "(1/2)"
-            print("Calculating founder kinship: " + step, file=sys.stderr)
-            
-        for founder in tqdm(founders, mininterval=5, disable=not progress):
-            K[founder, founder] = 0.5
-            
-            bfs = self.iter_edges(source=[founder])
-            # traversal = sorted([child for _, child in bfs], key=ordering)
-            traversal = [child for _, child in bfs]
-
-            for i, descendant in enumerate(traversal):
-                relatives[descendant].update(traversal[i+1:])
-                descendants.add(descendant)
-
-            for child in traversal:
-                p, q = G.predecessors(child)
-                kinship = (K[founder, p] + K[founder, q])/2
-                K[founder, child] = kinship
-                K[child, founder] = kinship
-
-        # assert all descendants aare seen
-        if not founders_only:
-            if progress:
-                print("Calculating relative kinship: (2/2)", file=sys.stderr)
-            descendants = sorted(descendants, key=ordering)
-
-            for individual in tqdm(descendants, mininterval=5, disable=not progress):
-                p, q = G.predecessors(individual)
-                print(p,q, K[p,q])
-                K[individual, individual] = 0.5 + K[p, q]
-
-                # remove duplicates
-                family = relatives[individual]
-                for relative in sorted(family, key=ordering):
-                    p, q = G.predecessors(relative)
-                    kinship = (K[individual, p] + K[individual, q])/2
-                    K[individual, relative] = kinship
-                    K[relative, individual] = kinship
-
-        return K
+        return K, label_to_index
 
 
     @staticmethod

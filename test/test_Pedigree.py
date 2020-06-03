@@ -116,10 +116,10 @@ def test_depth_ordering(pedigree):
     depth = ped.infer_depth()
     ordered_nodes = sorted(ped.nodes, key=lambda n: depth[n])
     ordered_labels = [next(label) for n in ordered_nodes]
-    relabelled = Pedigree(nx.relabel_nodes(ped.graph, dict(zip(ordered_nodes, ordered_labels))))
+    mapping = dict(zip(ordered_nodes, ordered_labels))
         
-    for parent, child in relabelled.iter_edges():
-        assert parent < child
+    for parent, child in ped.iter_edges():
+        assert mapping[parent] < mapping[child]
 
 
 @pytest.mark.parametrize(
@@ -151,11 +151,11 @@ def test_depth_ordering_with_shuffle(pedigree):
     depth = shuffled.infer_depth()
     ordered_nodes = sorted(shuffled.nodes, key=lambda n: depth[n])
     ordered_labels = [next(label) for n in ordered_nodes]
-    ordered = Pedigree(nx.relabel_nodes(shuffled.graph, dict(zip(ordered_nodes, ordered_labels))))
+    mapping = dict(zip(ordered_nodes, ordered_labels))
     
     # check oredring is correct
-    for parent, child in ordered.iter_edges():
-        assert parent < child
+    for parent, child in shuffled.iter_edges():
+        assert mapping[parent] < mapping[child]
     
 
 
@@ -195,19 +195,26 @@ def test_kinship_calculation(pedigree):
     darray = np.array([depth[i] for i in range(1, l + 1)])
 
     K_genlib = kinship_matrix(ped_df.individual, ped_df.mother, ped_df.father, darray)
-    K_traversal = ped.kinship_traversal(progress=False).todense()[1:, 1:]
+    K_lange, mapping = ped.kinship_lange()
 
-    print(K_genlib - K_traversal)
-    print(K_traversal)
+    print(K_genlib - K_lange)
+    print(K_lange)
     # use np.triu to get the upper triangle if we only store half the matrix
-    assert np.allclose(K_genlib, K_traversal)
+    
+    for i in ped.nodes:
+        for j in ped.nodes:
+            assert K_lange[mapping[i], mapping[j]] == K_genlib[i-1, j-1]
+
+
+    
 @pytest.mark.parametrize(
     "pedigree",
     ["inbreeding"]
 )
 def test_kinship_inbreeding(pedigree):
     ped = get_test_pedigree(pedigree)
-    K_traversal = ped.kinship_traversal(progress=False)
+    # K_traversal = ped.kinship_traversal(progress=False)
+    K_lange, mapping = ped.kinship_lange()
     
     exact_inbreeding = np.array([
         [1/2, 0,   1/4, 1/4, 1/4, 1/4],
@@ -223,6 +230,9 @@ def test_kinship_inbreeding(pedigree):
     darray = np.array([depth[i] for i in range(1, l + 1)])
     K_genlib = kinship_matrix(ped_df.individual, ped_df.mother, ped_df.father, darray)
 
-    assert np.allclose(exact_inbreeding, K_traversal.todense[1:, 1:])
+    for i in ped.nodes:
+        for j in ped.nodes:
+            assert K_lange[mapping[i], mapping[j]] == exact_inbreeding[i-1, j-1]
+
     assert np.allclose(exact_inbreeding, K_genlib)
     
