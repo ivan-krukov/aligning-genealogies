@@ -11,7 +11,7 @@ Welcome to genealogy_aligner's documentation!
 
 
 Table of contents
-========
+=================
 
 .. toctree::
    :maxdepth: 2

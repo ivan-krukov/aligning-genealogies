@@ -27,7 +27,10 @@ author = 'Ivan Krukov, Shadi Zabad, Anđela Todorović, Simon Gravel'
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode']
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode', 'sphinx.ext.napoleon', 'sphinx.ext.todo']
+
+autodoc_member_order = 'bysource'
+todo_include_todos = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -44,7 +47,9 @@ exclude_patterns = []
 # a list of builtin themes.
 #
 html_theme = 'alabaster'
-html_theme_options = {'page_width': "70%"}
+html_theme_options = {'description': 'A test ground for aligning genetic graphs',
+                      'code_font_size': "12px",
+                      'page_width': "75%"}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

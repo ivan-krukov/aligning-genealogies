@@ -26,4 +26,4 @@ A simple 8 individual pedigree looks like this::
   7             4       3       2
   8             6       5       1
 
-TODO: Visualize this
+.. todo:: Visualize this

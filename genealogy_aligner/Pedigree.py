@@ -18,8 +18,10 @@ from .utils import integer_dict
 
 
 class Pedigree(Genealogical):
+    """Handling Pedigree IO and calculations"""
 
     def __init__(self, graph=None):
+        
         super().__init__(graph)
         self.haplotypes = None
     
@@ -39,13 +41,25 @@ class Pedigree(Genealogical):
         return nx.get_node_attributes(self.graph, attr)
 
     def infer_depth(self, forward = True):
-        """Infer depth of each node - return as dict
-        Founders (nodes without parents) have depth 0
-        Each child: 1 + max(parental_depth)"""
+        """Infer depth of each node.
+
+        If ``forward=True``, founders (nodes without parents) have depth ``0``, each child: ``1 +
+        max(parental_depth)``
+
+        If ``forward=False``, probands (nodes without children) have depth ``0``, each parent: ``1 +
+        max(children_depth)``
+
+
+        Args:
+            forward=True: start at founders (no parents in pedigree), iterate descendants (down)
+            forward=False: start at probands (no children in pedigree), iterate parents (up)
+
+        Returns:
+            dict: mapping from nodes to depth
+
+        """
         depth = defaultdict(int)
-        # iteration starts at founders (no parents) if forward==True
-        # if forward==False, start at probands (no children)
-        # this is in the first (default) argument to iter_edges()
+        # forward is in the first (default) argument to iter_edges()
         for node, child in self.iter_edges(forward=forward):
             d = depth[node]            
             if depth[child] <= d:
@@ -54,6 +68,14 @@ class Pedigree(Genealogical):
         return depth
 
     def kinship_lange(self):
+        """Calculate the kinship matrix using the Lange kinship algorithm
+
+        This algorithm uses the partial ordering from ``infer_depth()`` to assign indices in the output matrix
+        
+        Returns:
+            np.array: dense symmetric matrix of kinsmip values
+            dict: mapping from node labels to node index in matrix ``K``
+        """
         G = self.graph
         label_gen = count(0)
         depth = self.infer_depth()
@@ -89,6 +111,19 @@ class Pedigree(Genealogical):
 
     @staticmethod
     def infer_sex(ind_id, pat_id, mat_id):
+        """Infer sex of an individual
+        
+        The inference is made based on whether the individual's ID is found in the ``maternal_id``
+        or ``paternal_id`` column. Note that this can not infer the sex of probands.
+
+        Args:
+            ind_id (np.array(int)): IDs of individuals
+            mat_id (np.array(int)): maternal IDs
+            pat_id (np.array(int)): paternal IDs
+
+        Returns:
+            np.array: with same ordering as ``ind_id``, with ``1`` for males, ``2`` for females, ``-1`` for unknown
+        """
         male = np.isin(ind_id, pat_id)
         female = np.isin(ind_id, mat_id)
         unknown = ~(male | female)
@@ -101,6 +136,19 @@ class Pedigree(Genealogical):
     
     @staticmethod
     def infer_time_old(ind_id, pat_id, mat_id):
+        """Infer pseudo-time for each node
+
+        Warning: 
+            deprecated in favor of :meth:`.infer_depth`
+
+        Args:
+            ind_id (np.array(int)): IDs of individuals
+            mat_id (np.array(int)): maternal IDs
+            pat_id (np.array(int)): paternal IDs
+
+        Returns:
+            dict: mapping node labels to node depth
+        """
         n = len(ind_id)
         assert n == len(mat_id)
         assert n == len(pat_id)
@@ -166,6 +214,24 @@ class Pedigree(Genealogical):
 
     @classmethod
     def read_balsac(cls, fname):
+        """Read BALSAC pedigree table
+
+        Warning:
+            This is deprecated in favor of :meth:`Pedigree.from_table`
+
+        The input table is expected to be a tab-separated file with the following columns:
+        
+        - `individual`: label for the individual
+        - `father`: label of individual's father
+        - `mother`: label of individual's mother
+        - `sex`: sex of the individual: `1` male, `2` female, `-1` unknown
+
+        Args:
+           fname (path): path to the input table
+
+        Returns:
+           Pedigree: a pedigree with `depth`, and `sex` parameters assigned to each node
+        """
         balsac_columns = ['individual', 'father', 'mother', 'sex']
         ped = cls()
         ped_df = pd.read_table(fname)
@@ -191,17 +257,48 @@ class Pedigree(Genealogical):
 
     @classmethod
     def from_table(cls, f_name, attrs=['time'],
-                   header=False, check_2_parents=True):
+                   header=False, check_2_parents=True, sep=None):
+        """Read pedigree from table
+        
+        The input table is required to have 3 following columns:
+        
+        - `individual`: label for the individual
+        - `father`: label of individual's father
+        - `mother`: label of individual's mother
+
+        If `sex` column is present, `1` will be interpreted as male, `2` as female, `-1` as unknown.
+
+        Any other additional columns, specified in ``attrs`` will be attached as attributes to the genealogy nodes.
+
+        Example:
+        
+        To read in a BALSAC-type table, use::
+            
+            Pedigree.from_table('path/to/table', attrs=['sex'], header=True, check_2_parents=False)
+
+
+        Args:
+            f_name (path): path of the table to be read
+            header (bool): is the header present in the input file?
+            check_2_parents (bool): should we check that each individual has unique parents? 
+            sep (str): Separator to use between columns. By default, an appropriate separator will be inferred using ``pandas.read_table``.
+
+        Raises:
+            ValueError: if `check_2_parents=True`, and ``father==mother`` for some row
+
+        Returns:
+            Pedigree: a pedigree, with ``time`` and ``sex`` parameters assigned to every node
+        """
 
         ped = cls()
         required_columns = ["individual", "father", "mother"]
 
         if header:
-            ped_df = pd.read_csv(f_name, sep="\t")
+            ped_df = pd.read_table(f_name, sep=sep)
             attrs = ped_df.columns[3:]
             ped_df.columns = required_columns + attrs
         else:
-            ped_df = pd.read_csv(f_name, sep="\t",
+            ped_df = pd.read_table(f_name, sep=sep,
                                  names= required_columns + attrs)
 
         # -------------------------------------------------------
@@ -270,6 +367,24 @@ class Pedigree(Genealogical):
         return ped
 
     def to_table(self, f_name=None, header=False, attrs=None):
+        """Convert a Pedigree into a ``pandas.DataFrame``
+
+        Export a pedigree, with all the node attributes as a tab-separated (TSV) file.
+
+        If ``f_name`` is omitted, return a ``pandas.DataFrame``. Otherwise, write dataframe to file,
+        return ``None``.
+
+        Todo:
+            Always return a dataframe, never write
+
+        Args:
+            f_name (path): output path
+            header (bool): should the header be written to the output file?
+            attrs (list(str)): node attributes to export into the table
+
+        Returns:
+            pandas.DataFrame: if ``f_name`` is ``None``, write to disk otherwise
+        """
 
         if attrs is None:
             attrs = self.attributes
@@ -289,7 +404,15 @@ class Pedigree(Genealogical):
         else:
             ped_df.to_csv(f_name, sep="\t", header=header, index=False)
 
+
     def to_msprime_pedigree(self):
+        """Create an ``msprime`` representation of the pedigree
+
+        This converts a :class:`Pedigree` into an ``msprime.Pedigree``
+
+        Returns:
+            msprime.Pedigree: an msprime Pedigree
+        """
 
         tbl = self.to_table()
 
@@ -309,6 +432,21 @@ class Pedigree(Genealogical):
                                      length=1e6,
                                      rho=1e-8,
                                      convert_to_traversal=True):
+
+        """Simulate with ``msprime`` upon a genealogy
+
+        Todo:
+            Always return an ``msprime.TreeSequence``, have an extra function to convert the output
+
+        Args:
+            Ne (int): effective population size to use after the pedigree simulation is complete
+            model_after ['dtwf'/'hudson']: simulation model after the pedigree simulation is complete
+            mu (float): mutation rate
+            length (float): length of the genomic segment to simulate
+            rho (float): recombination rate
+            convert_to_traversal (bool): should the return type be a :class:`Traversal`?
+
+            """
 
         rm = msp.RecombinationMap(
             [0, int(length)],
@@ -359,27 +497,17 @@ class Pedigree(Genealogical):
         """Simulate a genealogy forward in time, starting with `n_founders` individuals
         If an odd number of individuals are provide, an extra founder will be added
 
-        Parameters
-        ----------
-        n_founders: int
-            Number of founders starting the population
-        n_generations: int
-            Number of generations to simulate
-        avg_offspring=2: float
-            Average number of children per family, mean of Poisson RV
-        avg_immigrants=2: float
-            Average number of out-of family individuals added each generation
-        Raises
-        ------
-        RuntimeError
-            If a simulation is terminated before `n_generations`
-        Returns
-        -------
-        Pedigree
-            A wrapper around networkx.DiGraph of relationships.
-            Each node carries following attributes:
-            time: int      - generation back in time
-            Founders all have time=`n_generations`
+        Args:
+            n_founders (int): number of founders starting the population
+            n_generations (int): number of generations to simulate
+            avg_offspring=2 (float): average number of children per family, mean of Poisson RV
+            avg_immigrants=2 (float): average number of out-of family individuals added each generation
+        
+        Raises:
+            RuntimeError: if a simulation is terminated before `n_generations`
+
+        Returns:        
+            Pedigree: A wrapper around networkx.DiGraph of relationships.
         """
 
         ped = cls()
@@ -454,15 +582,13 @@ class Pedigree(Genealogical):
         return self.haplotypes
 
     def sample_path(self, probands=None, ploidy=1):
-        """
-        Sample a coalescent path from a genealogy
+        """Sample a coalescent path from a genealogy
 
         Starting at the probands (t=0), randomly choose a parent.
         Stop once founder individuals (t=max) are reached
 
         Returns:
-        --------
-        A `Traversal` object
+            A `Traversal` object
         """
 
         if probands is None:

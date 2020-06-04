@@ -1,5 +1,4 @@
-.. automodule:: genealogy_aligner
-.. py:currentmodule:: genealogy_aligner
+.. currentmodule:: genealogy_aligner
 
 Classes
 =======
