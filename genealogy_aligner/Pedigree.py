@@ -213,11 +213,10 @@ class Pedigree(Genealogical):
 
 
     @classmethod
-    def read_balsac(cls, fname):
+    def from_balsac_table(cls, fname, sep="\t"):
         """Read BALSAC pedigree table
 
-        Warning:
-            This is deprecated in favor of :meth:`Pedigree.from_table`
+        This is an alias to :meth:`Pedigree.from_table`, with correct arguments in place
 
         The input table is expected to be a tab-separated file with the following columns:
         
@@ -228,36 +227,17 @@ class Pedigree(Genealogical):
 
         Args:
            fname (path): path to the input table
+           sep (str): separator between columns
 
         Returns:
            Pedigree: a pedigree with `depth`, and `sex` parameters assigned to each node
         """
-        balsac_columns = ['individual', 'father', 'mother', 'sex']
-        ped = cls()
-        ped_df = pd.read_table(fname)
-        if ped_df.columns.tolist() != balsac_columns:
-            raise RuntimeError("Unexpected column headers - required format" + str(balsac_columns))
-
-        time = Pedigree.infer_time_old(ped_df['individual'], ped_df['mother'], ped_df['father'])
-        ped.generations = max(time)
-        
-
-        for i, row in ped_df.iterrows():
-            ind, pat_id, mat_id, sex = row
-            if pat_id == mat_id == 0:
-                ped.add_individual(ind, time[ind])
-            else:
-                ped.add_child(ind, pat_id, mat_id, time[ind])
-
-        nx.set_node_attributes(ped.graph, integer_dict(ped.infer_depth()), 'depth')
-        nx.set_node_attributes(ped.graph, integer_dict(ped_df.sex), 'sex')
-        
-        return ped
+        return Pedigree.from_table(fname, sep=sep, check_2_parents=False, attrs=['sex'], header=True)
     
 
     @classmethod
     def from_table(cls, f_name, attrs=['time'],
-                   header=False, check_2_parents=True, sep=None):
+                   header=False, check_2_parents=True, sep='\t'):
         """Read pedigree from table
         
         The input table is required to have 3 following columns:
@@ -296,10 +276,9 @@ class Pedigree(Genealogical):
         if header:
             ped_df = pd.read_table(f_name, sep=sep)
             attrs = ped_df.columns[3:]
-            ped_df.columns = required_columns + attrs
         else:
             ped_df = pd.read_table(f_name, sep=sep,
-                                 names= required_columns + attrs)
+                                   names= required_columns + attrs)
 
         # -------------------------------------------------------
         # Checking validity of table:
@@ -350,10 +329,10 @@ class Pedigree(Genealogical):
                 else:
                     return -1
 
-            ped_df['sex'] = ped_df['ind_id'].apply(infer_sex)
+            ped_df['sex'] = ped_df['individual'].apply(infer_sex)
 
             nx.set_node_attributes(ped.graph,
-                                   dict(zip(ped_df['ind_id'], ped_df['sex'])),
+                                   dict(zip(ped_df['individual'], ped_df['sex'])),
                                    'sex')
 
         # -------------------------------------------------------
@@ -362,7 +341,8 @@ class Pedigree(Genealogical):
         node_time = ped.get_node_attributes('time')
         ped.generations = max(node_time.values())
 
-        ped.graph.remove_node(0)
+        if 0 in ped.graph:
+            ped.graph.remove_node(0)
 
         return ped
 
@@ -643,12 +623,12 @@ class Pedigree(Genealogical):
         return tr
 
     def draw(self, ax=None, figsize=(8, 6), node_color=None, labels=True,
-             default_color='#2b8cbe', **kwargs):
+             default_color='#2b8cbe', font_size=8, **kwargs):
         """Uses `graphviz` `dot` to plot the genealogy"""
 
         if 'sex' not in self.attributes:
-            super().draw(labels=labels, node_color=node_color,
-                         default_color=default_color, ax=ax, **kwargs)
+            return super().draw(labels=labels, node_color=node_color,
+                                default_color=default_color, ax=ax, **kwargs)
         else:
 
             if ax is None:
@@ -686,10 +666,12 @@ class Pedigree(Genealogical):
             # Draw labels
             if labels:
                 nx.draw_networkx_labels(self.graph, pos, font_color='white',
-                                        font_size=8, ax=ax)
+                                        font_size=font_size, ax=ax)
 
             # Draw edges
             nx.draw_networkx_edges(self.graph, pos, ax=ax, **kwargs)
 
             # Turn off axis
             ax.set_axis_off()
+            
+            return ax

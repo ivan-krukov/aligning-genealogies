@@ -9,7 +9,7 @@ import pytest
 
 
 def get_test_pedigree(name):
-    return Pedigree.read_balsac("data/test/" + name + ".tsv")
+    return Pedigree.from_balsac_table("data/test/" + name + ".tsv")
 
 
 def get_test_pedigree_table(name):
@@ -25,7 +25,7 @@ def get_test_pedigree_table(name):
         ("proband_different_generations", [1, 2, 4, 5]),
         ("loop", [1, 2, 3, 6, 10]),
         ("inbreeding", [1, 2]),
-        ("intergenerational", [1,2,3,4])
+        ("intergenerational", [1, 2, 3, 4]),
     ],
 )
 def test_founders(pedigree, founders):
@@ -40,8 +40,8 @@ def test_founders(pedigree, founders):
         ("multiple_founder", [11, 12]),
         ("proband_different_generations", [7, 8]),
         ("loop", [11, 12]),
-        ("inbreeding", [5,6]),
-        ("intergenerational", [7,8])
+        ("inbreeding", [5, 6]),
+        ("intergenerational", [7, 8]),
     ],
 )
 def test_probands(pedigree, probands):
@@ -72,8 +72,8 @@ def test_iter_edges_backward(pedigree, bfs_bwd):
         ("multiple_founder", [0, 0, 0, 0, 1, 0, 0, 1, 2, 2, 3, 3]),
         ("proband_different_generations", [0, 0, 1, 0, 0, 2, 2, 3]),
         ("loop", [0, 0, 0, 1, 1, 0, 2, 2, 3, 0, 3, 4]),
-        ("inbreeding", [0,0,1,1,2,2]),
-        ("intergenerational", [0,0,0,0,1,1,2,2])
+        ("inbreeding", [0, 0, 1, 1, 2, 2]),
+        ("intergenerational", [0, 0, 0, 0, 1, 1, 2, 2]),
     ],
 )
 def test_depth(pedigree, depth):
@@ -87,8 +87,8 @@ def test_depth(pedigree, depth):
         ("multiple_founder", [3, 3, 3, 3, 2, 2, 2, 2, 1, 1, 0, 0]),
         ("proband_different_generations", [3, 3, 2, 2, 1, 1, 0, 0]),
         ("loop", [4, 4, 3, 3, 3, 3, 2, 2, 1, 1, 0, 0]),
-        ("inbreeding", [2,2,1,1,0,0]),
-        ("intergenerational", [2,2,2,2,1,1,0,0])
+        ("inbreeding", [2, 2, 1, 1, 0, 0]),
+        ("intergenerational", [2, 2, 2, 2, 1, 1, 0, 0]),
     ],
 )
 def test_depth_backward(pedigree, depth):
@@ -107,7 +107,7 @@ def test_depth_backward(pedigree, depth):
         "loop_2",
         "loop_3",
         "inbreeding",
-        "intergenerational"
+        "intergenerational",
     ],
 )
 def test_depth_ordering(pedigree):
@@ -117,7 +117,7 @@ def test_depth_ordering(pedigree):
     ordered_nodes = sorted(ped.nodes, key=lambda n: depth[n])
     ordered_labels = [next(label) for n in ordered_nodes]
     mapping = dict(zip(ordered_nodes, ordered_labels))
-        
+
     for parent, child in ped.iter_edges():
         assert mapping[parent] < mapping[child]
 
@@ -134,29 +134,30 @@ def test_depth_ordering(pedigree):
         "loop_2",
         "loop_3",
         "inbreeding",
-        "intergenerational"
+        "intergenerational",
     ],
 )
 def test_depth_ordering_with_shuffle(pedigree):
     np.random.seed(100)
     label = count(1)
     ped = get_test_pedigree(pedigree)
-    
+
     # shuffle labels
     orig_labels = list(ped.nodes)
     random_labels = np.random.choice(orig_labels, ped.n_individuals, replace=False)
-    shuffled = Pedigree(nx.relabel_nodes(ped.graph, dict(zip(orig_labels, random_labels))))
-    
+    shuffled = Pedigree(
+        nx.relabel_nodes(ped.graph, dict(zip(orig_labels, random_labels)))
+    )
+
     # infer and order by depth
     depth = shuffled.infer_depth()
     ordered_nodes = sorted(shuffled.nodes, key=lambda n: depth[n])
     ordered_labels = [next(label) for n in ordered_nodes]
     mapping = dict(zip(ordered_nodes, ordered_labels))
-    
+
     # check oredring is correct
     for parent, child in shuffled.iter_edges():
         assert mapping[parent] < mapping[child]
-    
 
 
 @pytest.mark.parametrize(
@@ -185,7 +186,15 @@ def test_sex(pedigree):
 
 @pytest.mark.parametrize(
     "pedigree",
-    ["simple", "disconnected", "multiple_founder", "proband_different_generations", "loop", "loop_2", "loop_3"],
+    [
+        "simple",
+        "disconnected",
+        "multiple_founder",
+        "proband_different_generations",
+        "loop",
+        "loop_2",
+        "loop_3",
+    ],
 )
 def test_kinship_calculation(pedigree):
     ped_df = get_test_pedigree_table(pedigree)
@@ -197,33 +206,31 @@ def test_kinship_calculation(pedigree):
     K_genlib = kinship_matrix(ped_df.individual, ped_df.mother, ped_df.father, darray)
     K_lange, mapping = ped.kinship_lange()
 
-    print(K_genlib - K_lange)
-    print(K_lange)
+    # print(K_genlib - K_lange)
+    # print(K_lange)
     # use np.triu to get the upper triangle if we only store half the matrix
-    
+
     for i in ped.nodes:
         for j in ped.nodes:
-            assert K_lange[mapping[i], mapping[j]] == K_genlib[i-1, j-1]
+            assert K_lange[mapping[i], mapping[j]] == K_genlib[i - 1, j - 1]
 
 
-    
-@pytest.mark.parametrize(
-    "pedigree",
-    ["inbreeding"]
-)
+@pytest.mark.parametrize("pedigree", ["inbreeding"])
 def test_kinship_inbreeding(pedigree):
     ped = get_test_pedigree(pedigree)
     # K_traversal = ped.kinship_traversal(progress=False)
     K_lange, mapping = ped.kinship_lange()
-    
-    exact_inbreeding = np.array([
-        [1/2, 0,   1/4, 1/4, 1/4, 1/4],
-        [0,   1/2, 1/4, 1/4, 1/4, 1/4],
-        [1/4, 1/4, 1/2, 1/4, 3/8, 3/8],
-        [1/4, 1/4, 1/4, 1/2, 3/8, 3/8],
-        [1/4, 1/4, 3/8, 3/8, 5/8, 3/8],
-        [1/4, 1/4, 3/8, 3/8, 3/8, 5/8]
-    ])
+
+    exact_inbreeding = np.array(
+        [
+            [1 / 2, 0, 1 / 4, 1 / 4, 1 / 4, 1 / 4],
+            [0, 1 / 2, 1 / 4, 1 / 4, 1 / 4, 1 / 4],
+            [1 / 4, 1 / 4, 1 / 2, 1 / 4, 3 / 8, 3 / 8],
+            [1 / 4, 1 / 4, 1 / 4, 1 / 2, 3 / 8, 3 / 8],
+            [1 / 4, 1 / 4, 3 / 8, 3 / 8, 5 / 8, 3 / 8],
+            [1 / 4, 1 / 4, 3 / 8, 3 / 8, 3 / 8, 5 / 8],
+        ]
+    )
     ped_df = get_test_pedigree_table(pedigree)
     depth = ped.infer_depth()
     l = ped.n_individuals
@@ -232,7 +239,31 @@ def test_kinship_inbreeding(pedigree):
 
     for i in ped.nodes:
         for j in ped.nodes:
-            assert K_lange[mapping[i], mapping[j]] == exact_inbreeding[i-1, j-1]
+            assert K_lange[mapping[i], mapping[j]] == exact_inbreeding[i - 1, j - 1]
 
     assert np.allclose(exact_inbreeding, K_genlib)
-    
+
+
+def test_read_balsac_table():
+    pd = Pedigree.from_balsac_table("data/test/simple.tsv")
+    assert list(pd.graph.nodes) == list(range(1, 8 + 1))
+
+
+def test_read_balsac_table_csv():
+    pd = Pedigree.from_balsac_table("data/test/simple.csv", sep=",")
+    assert list(pd.graph.nodes) == list(range(1, 8 + 1))
+
+
+def test_read_balsac_table_whitespace():
+    pd = Pedigree.from_balsac_table("data/test/simple.whitespace", sep=r"\s+")
+    assert list(pd.graph.nodes) == list(range(1, 8 + 1))
+
+
+def test_read_table_no_header():
+    pd = Pedigree.from_table(
+        "data/test/simple-no-header.tsv",
+        header=False,
+        check_2_parents=False,
+        attrs=["sex"],
+    )
+    assert list(pd.graph.nodes) == list(range(1, 8 + 1))
