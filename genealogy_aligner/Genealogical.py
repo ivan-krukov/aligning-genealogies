@@ -31,6 +31,10 @@ class Genealogical(object):
     def get_node_attr(self, attr):
         return nx.get_node_attributes(self.graph, attr)
 
+    def get_edge_attr(self, attr):
+        return nx.get_edge_attributes(self.graph, attr)
+
+
 
     def predecessors(self, node, k=1, include_founders=False):
 

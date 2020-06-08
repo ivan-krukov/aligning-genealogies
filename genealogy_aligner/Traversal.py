@@ -2,6 +2,7 @@ import networkx as nx
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
+from collections import defaultdict
 
 from .Genealogical import Genealogical
 
@@ -109,6 +110,52 @@ class Traversal(Genealogical):
         else:
             return t_obj
 
+        
+    def distances(self):
+        """Calculate distances between nodes in the Traversal
+
+        Returns:
+            dict: ``distance[target][source]``"""
+        dist = defaultdict(dict)
+        for parent, child in self.iter_edges():
+            deep = defaultdict(dict)
+            for source, d in dist[parent].items():
+                deep[child][source] = d + 1
+            dist.update(deep)
+            
+            dist[child][parent] = 1
+        return dist
+
+    def parent_of(self, node):
+        parents = list(self.graph.predecessors(node))
+        return parents[0] if parents else None
+
+
+    def to_coalescent(self):
+        """Remove internal nodes from a Traversal
+
+        Warning:
+            This method is unstable
+
+        """
+        time = self.get_node_attr('time')
+
+        dist = self.distances()
+        C = Traversal()
+        C.generations = self.generations
+        C.graph.add_nodes_from(self.probands(), time=0)
+
+        for t in range(self.generations):
+            for node in C.nodes_at_generation(t):
+                parent = self.parent_of(node)
+                while parent and self.graph.out_degree(parent) != 2:
+                    parent = self.parent_of(parent)
+                if parent:
+                    C.graph.add_node(parent, time=time[parent])
+                    C.graph.add_edge(parent, node, weight=dist[node][parent])
+        return C
+
+        
     def get_graphviz_layout(self):
         return nx.drawing.nx_agraph.graphviz_layout(self.graph.reverse(),
                                                     prog='dot',
