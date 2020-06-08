@@ -134,44 +134,6 @@ class Pedigree(Genealogical):
         sex[unknown] = -1
         return sex
     
-    @staticmethod
-    def infer_time_old(ind_id, pat_id, mat_id):
-        """Infer pseudo-time for each node
-
-        Warning: 
-            deprecated in favor of :meth:`.infer_depth`
-
-        Args:
-            ind_id (np.array(int)): IDs of individuals
-            mat_id (np.array(int)): maternal IDs
-            pat_id (np.array(int)): paternal IDs
-
-        Returns:
-            dict: mapping node labels to node depth
-        """
-        n = len(ind_id)
-        assert n == len(mat_id)
-        assert n == len(pat_id)
-
-        depth = np.zeros(n, dtype=int)
-        if n == 1:
-            return depth
-
-        parents = ind_id[(mat_id == 0) & (pat_id == 0)]
-
-        for i in np.arange(1, n+1):
-            # all the individuals whose parents are founders
-            children = np.isin(mat_id, parents) | np.isin(pat_id, parents)
-            if i == n:
-                raise RuntimeError("Impossible pedigree - someone is their own ancestor")
-            if np.any(children):
-                depth[children] = i
-                parents = ind_id[children]
-            else:
-                break
-
-        # flip!
-        return dict(zip(ind_id, np.abs(depth - max(depth))))
 
     def get_parents(self, n):
 
@@ -210,6 +172,8 @@ class Pedigree(Genealogical):
                 father, mother = rnd.choice(pred, 2, replace=False)
 
         return father, mother
+
+    
 
 
     @classmethod
@@ -255,6 +219,10 @@ class Pedigree(Genealogical):
         To read in a BALSAC-type table, use::
             
             Pedigree.from_table('path/to/table', attrs=['sex'], header=True, check_2_parents=False)
+        
+        or::
+           
+            Pedigree.from_balsac_table('path/to-table')
 
 
         Args:
@@ -283,7 +251,6 @@ class Pedigree(Genealogical):
         # -------------------------------------------------------
         # Checking validity of table:
 
-        # TODO: ID of 0 is special in BALSAC
         if check_2_parents:
             cond = (
                     ((ped_df['father'] == 0) & (ped_df['mother'] != 0)) |
@@ -311,33 +278,18 @@ class Pedigree(Genealogical):
 
         # Adding inferred time if not in attribute list:
         if 'time' not in attrs:
-            nx.set_node_attributes(ped.graph,
-                                   Pedigree.infer_time_old(ped_df['individual'],
-                                                       ped_df['father'],
-                                                       ped_df['mother']),
-                                   'time')
-        ped.infer_depth()
-
+            coal_time = ped.infer_depth(forward=False)
+            nx.set_node_attributes(ped.graph, coal_time, 'time')
+            
         # Adding inferred sex if not in attribute list:
         if 'sex' not in attrs:
-
-            def infer_sex(node_id):
-                if node_id in ped_df['father']:
-                    return 1
-                elif node_id in ped_df['mother']:
-                    return 2
-                else:
-                    return -1
-
-            ped_df['sex'] = ped_df['individual'].apply(infer_sex)
-
+            sex = infer_sex(ped_df.individual, ped_df.father, ped_df.mother)
             nx.set_node_attributes(ped.graph,
-                                   dict(zip(ped_df['individual'], ped_df['sex'])),
+                                   dict(zip(ped_df.individual, sex)),
                                    'sex')
 
         # -------------------------------------------------------
         # Final touches
-
         node_time = ped.get_node_attributes('time')
         ped.generations = max(node_time.values())
 
@@ -346,43 +298,38 @@ class Pedigree(Genealogical):
 
         return ped
 
-    def to_table(self, f_name=None, header=False, attrs=None):
-        """Convert a Pedigree into a ``pandas.DataFrame``
+    def to_table(self):
+        """Convert a :class:`Pedigree` to a ``pandas.DataFrame``"""
 
-        Export a pedigree, with all the node attributes as a tab-separated (TSV) file.
-
-        If ``f_name`` is omitted, return a ``pandas.DataFrame``. Otherwise, write dataframe to file,
-        return ``None``.
-
-        Todo:
-            Always return a dataframe, never write
-
-        Args:
-            f_name (path): output path
-            header (bool): should the header be written to the output file?
-            attrs (list(str)): node attributes to export into the table
-
-        Returns:
-            pandas.DataFrame: if ``f_name`` is ``None``, write to disk otherwise
-        """
-
-        if attrs is None:
-            attrs = self.attributes
-
-        ped_df = []
+        tbl = {node: 
+            {'individual': node,
+             'mother': 0,
+             'father': 0} for node in self.graph.nodes}
         
-        for i, n in enumerate(self.nodes):
+        for attr in self.attributes:
+            attr_dict = self.get_node_attr(attr)
+            for node in self.graph.nodes:
+                tbl[node][attr] = attr_dict[node]
+        
+        sex = self.get_node_attr('sex')
+        
+        for node, parent in self.iter_edges(forward=False):
 
-            node_attr = [self.get_node_attributes(at, n) for at in attrs]
-            ped_df.append([n] + list(self.get_parents(n)) + node_attr)
+            if sex[parent] == 1:
+                tbl[node]['father'] = parent
+            elif sex[parent] == 2:
+                tbl[node]['mother'] = parent
+            else: # sex unknown - implies sex == -1
+                if tbl[node]['father'] == 0:
+                    tbl[node]['father'] = parent
+                elif tbl[node]['mother'] == 0:
+                    tbl[node]['mother'] = parent
+                else:
+                    raise RuntimeError(f'Individual {node} has more than 2 parents')
 
-        ped_df = pd.DataFrame(ped_df,
-                              columns=['individual', 'father', 'mother'] + list(attrs))
-
-        if f_name is None:
-            return ped_df
-        else:
-            ped_df.to_csv(f_name, sep="\t", header=header, index=False)
+        df = pd.DataFrame.from_dict(tbl, orient='index')
+        df.sort_index(inplace=True)
+        return df
 
 
     def to_msprime_pedigree(self):

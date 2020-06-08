@@ -245,25 +245,52 @@ def test_kinship_inbreeding(pedigree):
 
 
 def test_read_balsac_table():
-    pd = Pedigree.from_balsac_table("data/test/simple.tsv")
-    assert list(pd.graph.nodes) == list(range(1, 8 + 1))
+    ped = Pedigree.from_balsac_table("data/test/simple.tsv")
+    assert list(ped.graph.nodes) == list(range(1, 8 + 1))
 
 
 def test_read_balsac_table_csv():
-    pd = Pedigree.from_balsac_table("data/test/simple.csv", sep=",")
-    assert list(pd.graph.nodes) == list(range(1, 8 + 1))
+    ped = Pedigree.from_balsac_table("data/test/simple.csv", sep=",")
+    assert list(ped.graph.nodes) == list(range(1, 8 + 1))
 
 
 def test_read_balsac_table_whitespace():
-    pd = Pedigree.from_balsac_table("data/test/simple.whitespace", sep=r"\s+")
-    assert list(pd.graph.nodes) == list(range(1, 8 + 1))
+    ped = Pedigree.from_balsac_table("data/test/simple.whitespace", sep=r"\s+")
+    assert list(ped.graph.nodes) == list(range(1, 8 + 1))
 
 
 def test_read_table_no_header():
-    pd = Pedigree.from_table(
+    ped = Pedigree.from_table(
         "data/test/simple-no-header.tsv",
         header=False,
         check_2_parents=False,
         attrs=["sex"],
     )
-    assert list(pd.graph.nodes) == list(range(1, 8 + 1))
+    assert list(ped.graph.nodes) == list(range(1, 8 + 1))
+
+
+def test_to_table():
+    ped = Pedigree.from_balsac_table("data/test/simple.tsv")
+    ped_df = pd.read_table("data/test/simple.tsv")
+    tbl = ped.to_table()
+    tbl.reset_index(inplace=True)
+    
+    assert np.all(ped_df.individual == tbl.individual)
+    assert np.all(ped_df.father == tbl.father)
+    assert np.all(ped_df.mother == tbl.mother)
+    assert np.all(ped_df.sex == tbl.sex)
+
+
+def test_to_table_with_inferred_sex():
+    ped = Pedigree.from_balsac_table("data/test/simple.tsv")
+    ped_df = pd.read_table("data/test/simple.tsv")
+    inferred_sex = Pedigree.infer_sex(ped_df.individual, ped_df.father, ped_df.mother)
+    nx.set_node_attributes(ped.graph, dict(zip(ped_df.individual, inferred_sex)), 'sex')
+    tbl = ped.to_table()
+    tbl.reset_index(inplace=True)
+
+    assert np.all(ped_df.individual == tbl.individual)
+    assert np.all(ped_df.father == tbl.father)
+    assert np.all(ped_df.mother == tbl.mother)
+    assert np.all([1,2,2,1,2,1,-1,-1] == tbl.sex)
+
