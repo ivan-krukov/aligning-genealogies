@@ -37,9 +37,6 @@ class Pedigree(Genealogical):
         self.graph.add_edge(mat_id, child_id)
         self.graph.add_edge(pat_id, child_id)
 
-    def get_node_attr(self, attr):
-        return nx.get_node_attributes(self.graph, attr)
-
     def infer_depth(self, forward = True):
         """Infer depth of each node.
 
@@ -569,6 +566,27 @@ class Pedigree(Genealogical):
 
         return tr
 
+
+    def sample_haploid_path(self):
+
+        time = self.get_node_attr('time')
+        
+        T = Traversal()
+        T.generations = self.generations
+        T.graph.add_nodes_from(self.probands(), time=0)
+        T.ts_node_to_ped_node = {}
+
+        for t in range(self.generations):
+            for node in T.nodes_at_generation(t):
+                parents = list(self.graph.predecessors(node))
+                if parents:
+                    parent = rnd.choice(parents)
+                    T.graph.add_node(parent, time=time[parent])
+                    T.graph.add_edge(parent, node)
+            
+        return T
+
+    
     def draw(self, ax=None, figsize=(8, 6), node_color=None, labels=True,
              default_color='#2b8cbe', font_size=8, **kwargs):
         """Uses `graphviz` `dot` to plot the genealogy"""

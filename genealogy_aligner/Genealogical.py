@@ -1,6 +1,7 @@
 import networkx as nx
 from collections.abc import Iterable
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class Genealogical(object):
@@ -26,6 +27,10 @@ class Genealogical(object):
     @property
     def attributes(self):
         return list(list(self.graph.nodes(data=True))[0][1].keys())
+
+    def get_node_attr(self, attr):
+        return nx.get_node_attributes(self.graph, attr)
+
 
     def predecessors(self, node, k=1, include_founders=False):
 
@@ -79,8 +84,13 @@ class Genealogical(object):
         else:
             return node_attr[node]
 
-    def get_individuals_at_generation(self, k):
-        return self.filter_nodes(lambda node, data: data['time'] == k)
+    def nodes_at_generation_view(self, k):
+        time = self.get_node_attr('time')
+        G = self.graph
+        return nx.subgraph_view(G, lambda n: time[n] == k)
+
+    def nodes_at_generation(self, k):
+        return list(self.nodes_at_generation_view(k).nodes)        
 
 
     def founders_view(self):
@@ -196,3 +206,21 @@ class Genealogical(object):
         nx.draw(self.graph, pos=self.get_graphviz_layout(), with_labels=labels,
                 node_shape=node_shape, node_color=node_col,
                 ax=ax, font_color='white', font_size=8, **kwargs)
+
+        return ax
+
+        
+    def similarity(self):
+        # A kinship-like distance function
+        n = self.n_individuals        
+        K = np.zeros((n,n), dtype=float)
+
+        for i in range(n):
+            K[i,i] = 0.5
+            for j in range(i+1, n):
+                # this should not be necessary
+                if any(self.graph.predecessors(j)):
+                    p = next(self.graph.predecessors(j))
+                    K[i,j] = (K[i,p]/2)
+                    K[j,i] = K[i,j]
+        return K
