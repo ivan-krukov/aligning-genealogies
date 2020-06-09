@@ -1,6 +1,7 @@
 import networkx as nx
 from collections.abc import Iterable
-import matplotlib.pyplot as plt
+
+from .Drawing import draw
 import numpy as np
 
 
@@ -28,13 +29,8 @@ class Genealogical(object):
     def attributes(self):
         return list(list(self.graph.nodes(data=True))[0][1].keys())
 
-    def get_node_attr(self, attr):
-        return nx.get_node_attributes(self.graph, attr)
-
     def get_edge_attr(self, attr):
         return nx.get_edge_attributes(self.graph, attr)
-
-
 
     def predecessors(self, node, k=1, include_founders=False):
 
@@ -86,7 +82,10 @@ class Genealogical(object):
         if node is None:
             return node_attr
         else:
-            return node_attr[node]
+            try:
+                return node_attr[node]
+            except KeyError:
+                return {}
 
     def nodes_at_generation_view(self, k):
         time = self.get_node_attr('time')
@@ -95,7 +94,6 @@ class Genealogical(object):
 
     def nodes_at_generation(self, k):
         return list(self.nodes_at_generation_view(k).nodes)        
-
 
     def founders_view(self):
         G = self.graph
@@ -115,7 +113,6 @@ class Genealogical(object):
         """Get a list of individuals with no children"""
         return list(self.probands_view().nodes)
 
-    
     def iter_edges(self, forward=True, source=None):
         """Iterates edges in a breadth-first-search
         Yields a pair of `(node, neighbor)`
@@ -154,7 +151,6 @@ class Genealogical(object):
             curr_gen = next_gen
             next_gen = set()
 
-
     def get_probands_under(self, nodes=None, climb_up_step=0):
 
         if nodes is None:
@@ -188,32 +184,9 @@ class Genealogical(object):
 
         return ntp
 
-    def get_graphviz_layout(self):
-        return nx.drawing.nx_agraph.graphviz_layout(self.graph, prog='dot')
+    def draw(self, **kwargs):
+        return draw(self.graph, **kwargs)
 
-    def draw(self, ax=None, figsize=(16, 8), node_color=None, labels=True,
-             node_shape='s', default_color='#2b8cbe', **kwargs):
-
-        if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
-
-        if node_color is None:
-            node_col = [default_color]*self.n_individuals
-        else:
-            node_col = []
-            for n in self.nodes:
-                try:
-                    node_col.append(node_color[n])
-                except KeyError:
-                    node_col.append(default_color)
-
-        nx.draw(self.graph, pos=self.get_graphviz_layout(), with_labels=labels,
-                node_shape=node_shape, node_color=node_col,
-                ax=ax, font_color='white', font_size=8, **kwargs)
-
-        return ax
-
-        
     def similarity(self):
         # A kinship-like distance function
         n = self.n_individuals        

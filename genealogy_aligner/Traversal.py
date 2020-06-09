@@ -1,10 +1,10 @@
 import networkx as nx
 import numpy as np
 import copy
-import matplotlib.pyplot as plt
 from scipy.sparse import dok_matrix
 from collections import defaultdict
 
+from .Drawing import draw
 from .Genealogical import Genealogical
 
 
@@ -111,10 +111,8 @@ class Traversal(Genealogical):
         else:
             return t_obj
 
-        
     def distances(self):
         """Calculate distances between nodes in the Traversal
-
         Returns:
             dict: ``distance[target][source]``"""
         dist = defaultdict(dict)
@@ -123,7 +121,7 @@ class Traversal(Genealogical):
             for source, d in dist[parent].items():
                 deep[child][source] = d + 1
             dist.update(deep)
-            
+
             dist[child][parent] = 1
         return dist
 
@@ -146,17 +144,14 @@ class Traversal(Genealogical):
         parents = list(self.graph.predecessors(node))
         return parents[0] if parents else None
 
-
     def to_coalescent(self):
         """Remove internal nodes from a Traversal
-
         Warning:
             This method is unstable
-
         """
         time = self.get_node_attr('time')
 
-        #dist = self.distances()
+        # dist = self.distances()
         dist = self.distances_nx()
         C = Traversal()
         C.generations = self.generations
@@ -174,32 +169,8 @@ class Traversal(Genealogical):
         C.graph.remove_nodes_from(list(nx.isolates(C.graph)))
         return C
 
-        
-    def get_graphviz_layout(self):
-        return nx.drawing.nx_agraph.graphviz_layout(self.graph.reverse(),
-                                                    prog='dot',
-                                                    args='-Grankdir=BT')
-
-    def draw(self, ax=None, figsize=(8, 6),
-             node_color=None, labels=True, label_dict=None,
-             node_shape='s', default_color='#2b8cbe', **kwargs):
-        """Uses `graphviz` `dot` to plot the genealogy"""
-
-        if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
-
-        if node_color is None:
-            node_col = [default_color]*self.n_individuals
+    def draw(self, **kwargs):
+        if 'reverse' not in kwargs:
+            return draw(self.graph, reverse=True, **kwargs)
         else:
-            node_col = []
-            for n in self.nodes:
-                try:
-                    node_col.append(node_color[n])
-                except KeyError:
-                    node_col.append(default_color)
-
-        nx.draw(self.graph.reverse(),
-                pos=self.get_graphviz_layout(),
-                with_labels=labels, node_shape=node_shape,
-                node_color=node_col, ax=ax, font_color='white', font_size=8,
-                arrows=False, labels=label_dict, **kwargs)
+            return draw(self.graph, **kwargs)

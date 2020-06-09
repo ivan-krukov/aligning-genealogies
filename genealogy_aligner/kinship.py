@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 from genealogy_aligner import Pedigree
 
+
 def get_index(table, query):
     # return index of each query in table
     # assumes table is sorted

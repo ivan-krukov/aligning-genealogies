@@ -2,7 +2,7 @@
 
 from genealogy_aligner import Pedigree
 import matplotlib.pyplot as plt
-from util import get_basename
+from .util import get_basename
 
 founders = 10
 generations = 4

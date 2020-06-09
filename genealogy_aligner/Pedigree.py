@@ -9,11 +9,11 @@ import sys
 import numpy as np
 import pandas as pd
 from numpy import random as rnd
-import matplotlib.pyplot as plt
 
 from .Genealogical import Genealogical
 from .Traversal import Traversal
 from .Haplotype import Haplotype
+from .Drawing import draw
 from .utils import integer_dict
 
 
@@ -105,7 +105,6 @@ class Pedigree(Genealogical):
 
         return K, label_to_index
 
-
     @staticmethod
     def infer_sex(ind_id, pat_id, mat_id):
         """Infer sex of an individual
@@ -130,7 +129,6 @@ class Pedigree(Genealogical):
         # TODO: should this be `0`?
         sex[unknown] = -1
         return sex
-    
 
     def get_parents(self, n):
 
@@ -158,7 +156,7 @@ class Pedigree(Genealogical):
                 pred_sex = [self.get_node_attributes('sex', p) for p in pred]
 
                 if pred_sex[0] == 1 or pred_sex[1] == 2:
-                    fathepr, mother = pred
+                    father, mother = pred
                 elif pred_sex[0] == 2 or pred_sex[1] == 1:
                     father, mother = pred[::-1]
                 else:
@@ -169,9 +167,6 @@ class Pedigree(Genealogical):
                 father, mother = rnd.choice(pred, 2, replace=False)
 
         return father, mother
-
-    
-
 
     @classmethod
     def from_balsac_table(cls, fname, sep="\t"):
@@ -194,10 +189,9 @@ class Pedigree(Genealogical):
            Pedigree: a pedigree with `depth`, and `sex` parameters assigned to each node
         """
         return Pedigree.from_table(fname, sep=sep, check_2_parents=False, attrs=['sex'], header=True)
-    
 
     @classmethod
-    def from_table(cls, f_name, attrs=['time'],
+    def from_table(cls, f_name, attrs=('time',),
                    header=False, check_2_parents=True, sep='\t'):
         """Read pedigree from table
         
@@ -240,10 +234,11 @@ class Pedigree(Genealogical):
 
         if header:
             ped_df = pd.read_table(f_name, sep=sep)
-            attrs = ped_df.columns[3:]
+            attrs = list(ped_df.columns[3:])
+            ped_df.columns = required_columns + attrs
         else:
             ped_df = pd.read_table(f_name, sep=sep,
-                                   names= required_columns + attrs)
+                                   names=required_columns + attrs)
 
         # -------------------------------------------------------
         # Checking validity of table:
@@ -280,7 +275,7 @@ class Pedigree(Genealogical):
             
         # Adding inferred sex if not in attribute list:
         if 'sex' not in attrs:
-            sex = infer_sex(ped_df.individual, ped_df.father, ped_df.mother)
+            sex = ped.infer_sex(ped_df.individual, ped_df.father, ped_df.mother)
             nx.set_node_attributes(ped.graph,
                                    dict(zip(ped_df.individual, sex)),
                                    'sex')
@@ -304,11 +299,11 @@ class Pedigree(Genealogical):
              'father': 0} for node in self.graph.nodes}
         
         for attr in self.attributes:
-            attr_dict = self.get_node_attr(attr)
+            attr_dict = self.get_node_attributes(attr)
             for node in self.graph.nodes:
                 tbl[node][attr] = attr_dict[node]
         
-        sex = self.get_node_attr('sex')
+        sex = self.get_node_attributes('sex')
         
         for node, parent in self.iter_edges(forward=False):
 
@@ -327,7 +322,6 @@ class Pedigree(Genealogical):
         df = pd.DataFrame.from_dict(tbl, orient='index')
         df.sort_index(inplace=True)
         return df
-
 
     def to_msprime_pedigree(self):
         """Create an ``msprime`` representation of the pedigree
@@ -417,7 +411,8 @@ class Pedigree(Genealogical):
             return sim, ts_nodes_to_ped_map
 
     @classmethod
-    def simulate_from_founders(cls, n_founders, n_generations, avg_offspring=2, avg_immigrants=2):
+    def simulate_from_founders(cls, n_founders, n_generations,
+                               avg_offspring=2, avg_immigrants=2):
         """Simulate a genealogy forward in time, starting with `n_founders` individuals
         If an odd number of individuals are provide, an extra founder will be added
 
@@ -566,10 +561,9 @@ class Pedigree(Genealogical):
 
         return tr
 
-
     def sample_haploid_path(self):
 
-        time = self.get_node_attr('time')
+        time = self.get_node_attributes('time')
         
         T = Traversal()
         T.generations = self.generations
@@ -586,57 +580,15 @@ class Pedigree(Genealogical):
             
         return T
 
-    
-    def draw(self, ax=None, figsize=(8, 6), node_color=None, labels=True,
-             default_color='#2b8cbe', font_size=8, **kwargs):
+    def draw(self, **kwargs):
         """Uses `graphviz` `dot` to plot the genealogy"""
-
-        if 'sex' not in self.attributes:
-            return super().draw(labels=labels, node_color=node_color,
-                                default_color=default_color, ax=ax, **kwargs)
+        if 'node_shape' in kwargs:
+            return draw(self.graph, **kwargs)
         else:
-
-            if ax is None:
-                fig, ax = plt.subplots(figsize=figsize)
-
-            if node_color is None:
-                node_col = dict(zip(self.nodes, [default_color] * self.n_individuals))
+            if 'sex' in self.attributes:
+                sex_to_shape = {1: 's', 2: 'o', 3: 'p'}
+                return draw(self.graph, node_shape={
+                    k: sex_to_shape[v] for k, v in self.get_node_attributes('sex').items()
+                }, **kwargs)
             else:
-                node_col = node_color
-                for n in self.nodes:
-                    if n not in node_col:
-                        node_col[n] = default_color
-
-            pos = self.get_graphviz_layout()
-
-            node_sex = self.get_node_attributes('sex')
-            males = [n for n, s in node_sex.items() if s == 1]
-            females = [n for n, s in node_sex.items() if s == 2]
-            unknown = [n for n, s in node_sex.items() if s == -1]
-
-            # Draw nodes:
-            nx.draw_networkx_nodes(self.graph, pos, nodelist=females,
-                                   node_shape='o',
-                                   node_color=[node_col[f] for f in females],
-                                   ax=ax, **kwargs)
-            nx.draw_networkx_nodes(self.graph, pos, nodelist=males,
-                                   node_shape='s',
-                                   node_color=[node_col[m] for m in males],
-                                   ax=ax, **kwargs)
-            nx.draw_networkx_nodes(self.graph, pos, nodelist=unknown,
-                                   node_shape='p',
-                                   node_color=[node_col[u] for u in unknown],
-                                   ax=ax, **kwargs)
-
-            # Draw labels
-            if labels:
-                nx.draw_networkx_labels(self.graph, pos, font_color='white',
-                                        font_size=font_size, ax=ax)
-
-            # Draw edges
-            nx.draw_networkx_edges(self.graph, pos, ax=ax, **kwargs)
-
-            # Turn off axis
-            ax.set_axis_off()
-            
-            return ax
+                return draw(self.graph, **kwargs)

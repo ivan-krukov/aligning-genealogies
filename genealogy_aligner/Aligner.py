@@ -1,9 +1,10 @@
 from gensim.models.poincare import PoincareModel
+import copy
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
+
 from .evaluation import accuracy
 from .utils import greedy_matching
+from .Drawing import draw_aligner
 
 
 class Aligner(object):
@@ -23,8 +24,12 @@ class Aligner(object):
         self.ts_probands = self.ts.probands()
         self.ts_nonprobands = list(set(self.ts.nodes) - set(self.ts_probands))
 
-        self.true_ts_node_to_ped_node = ts.ts_node_to_ped_node
-        self.true_ped_node_to_ts_edge = ts.ped_node_to_ts_edge
+        self.true_ts_node_to_ped_node = copy.copy(ts.ts_node_to_ped_node)
+
+        for n_ts in (set(self.ts.nodes) - set(ts.ts_node_to_ped_node)):
+            self.true_ts_node_to_ped_node[n_ts] = None
+
+        self.true_ped_node_to_ts_edge = copy.copy(ts.ped_node_to_ts_edge)
 
         self.ts_proband_to_ped_proband = {
             n_ts: n_ped
@@ -50,57 +55,32 @@ class Aligner(object):
 
         return metrics
 
-    def draw(self, use_predicted=False,
-             figsize=(16, 8), labels=True,
-             ped_node_color=None, ts_node_color=None,
-             use_ped_labels=True,
-             edge_color_map='nipy_spectral'):
+    def draw(self, use_predicted=False, exclude_probands=True,
+             use_ped_labels=True, ped_kwargs=None, ts_kwargs=None, **kwargs):
 
         if use_predicted and (self.pred_ts_node_to_ped_node is None):
             raise Exception("You must call .align() in order to view predicted alignments.")
 
-        fig, axes = plt.subplots(ncols=2, figsize=figsize)
+        if use_predicted:
+            anchor_links = self.pred_ts_node_to_ped_node
+        else:
+            anchor_links = self.true_ts_node_to_ped_node
 
-        self.ped.draw(ax=axes[0], node_color=ped_node_color, labels=labels)
+        if exclude_probands:
+            anchor_links = {k: v for k, v in anchor_links.items()
+                            if v not in self.ped_probands}
+
+        anchor_links = {k: v for k, v in anchor_links.items()
+                        if k is not None and v is not None}
 
         if use_ped_labels:
-            self.ts.draw(ax=axes[1], node_color=ts_node_color, labels=labels,
-                         label_dict=self.ts.ts_node_to_ped_node)
-        else:
-            self.ts.draw(ax=axes[1], node_color=ts_node_color, labels=labels)
+            if ts_kwargs is None:
+                ts_kwargs = {'label_dict': self.ts.ts_node_to_ped_node}
+            else:
+                ts_kwargs['label_dict'] = self.ts.ts_node_to_ped_node
 
-        ped_layout = self.ped.get_graphviz_layout()
-        ts_layout = self.ts.get_graphviz_layout()
-
-        if use_predicted:
-            align_map = self.pred_ts_node_to_ped_node
-        else:
-            align_map = self.true_ts_node_to_ped_node
-
-        # Transform figure:
-        ax0tr = axes[0].transData
-        ax1tr = axes[1].transData
-        figtr = fig.transFigure.inverted()
-
-        cmap = matplotlib.cm.get_cmap(edge_color_map)
-
-        align_map = [(ts_n, ped_n) for ts_n, ped_n in align_map.items()
-                     if ped_n not in self.ped_probands]
-
-        for i, (ts_n, ped_n) in enumerate(align_map):
-            # 2. Transform arrow start point from axis 0 to figure coordinates
-            ptB = figtr.transform(ax0tr.transform(ped_layout[ped_n]))
-            # 3. Transform arrow end point from axis 1 to figure coordinates
-            ptE = figtr.transform(ax1tr.transform(ts_layout[ts_n]))
-            # 4. Create the patch
-            arrow = matplotlib.patches.FancyArrowPatch(
-                ptB, ptE, transform=fig.transFigure,  # Place arrow in figure coord system
-                color=cmap(i/len(align_map)), connectionstyle="arc3,rad=0.3",
-                arrowstyle='-', alpha=0.3,
-                shrinkA=10, shrinkB=10, linestyle='dashed'
-            )
-            # 5. Add patch to list of objects to draw onto the figure
-            fig.patches.append(arrow)
+        draw_aligner(self.ped, self.ts, anchor_links,
+                     ped_kwargs=ped_kwargs, ts_kwargs=ts_kwargs, **kwargs)
 
 
 class MatchingAligner(Aligner):

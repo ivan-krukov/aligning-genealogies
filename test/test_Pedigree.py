@@ -1,5 +1,5 @@
 from genealogy_aligner import Pedigree
-from genealogy_aligner.kinship import kinship_matrix, kinship_traversal
+from genealogy_aligner.kinship import kinship_matrix
 from genealogy_aligner.utils import integer_dict
 import pandas as pd
 import numpy as np

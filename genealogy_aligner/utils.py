@@ -1,6 +1,76 @@
 import networkx as nx
+from collections.abc import Iterable
 import numpy as np
 import pandas as pd
+
+
+def create_attr_dictionary(items, attr_dict, default, invert=False):
+    """
+    A helper function that takes a list of items, a partial dictionary containing
+    information for some of the items, and a default value for the remaining. The
+    function fills in the value for the remaining items.
+    If `invert` is `True`, the dictionary is inverted so that values are keys and
+    keys are values.
+    :param items:
+    :param attr_dict:
+    :param default:
+    :param invert:
+    :return:
+    """
+    fin_attr_dict = dict(zip(items, [default] * len(items)))
+
+    if attr_dict is not None:
+        fin_attr_dict.update(attr_dict)
+
+    fin_attr_dict = {k: v for k, v in fin_attr_dict.items() if k in items}
+
+    if invert:
+
+        n_attr_dict = {}
+
+        for k, v in fin_attr_dict.items():
+            if v in n_attr_dict:
+                n_attr_dict[v].append(k)
+            else:
+                n_attr_dict[v] = [k]
+
+        return n_attr_dict
+    else:
+        return fin_attr_dict
+
+
+def get_k_order_neighbors(graph, source_nodes,
+                          radius=1, undirected=True):
+    """
+    This function takes a graph, a source node, and a radius,
+    and returns a dictionary of all nodes in the graph that are
+    within that radius as well as the (min) distance from the nodes
+    in the subset.
+
+    :param graph:
+    :param source_nodes:
+    :param radius:
+    :param undirected:
+    :return:
+    """
+
+    if undirected:
+        graph = graph.to_undirected()
+
+    if not isinstance(source_nodes, Iterable) or type(source_nodes) == str:
+        source_nodes = [source_nodes]
+
+    node_subset = {}
+
+    for n in source_nodes:
+        for nn, dist in nx.single_source_shortest_path_length(graph, n,
+                                                              cutoff=radius).items():
+            if nn in node_subset:
+                node_subset[nn] = min(node_subset[nn], dist)
+            else:
+                node_subset[nn] = dist
+
+    return node_subset
 
 
 def integer_dict(values, start=1):
@@ -43,10 +113,4 @@ def greedy_matching(total_edge_index, sim_scores):
         sim_scores = sim_scores[step_filt]
 
     return pred_pairs
-
-
-def draw_graphviz(G, labels=True, ax=None):
-    """Uses `graphviz` to plot the genealogy"""
-    pos = nx.drawing.nx_agraph.graphviz_layout(G, prog='dot')
-    nx.draw(G, pos=pos, with_labels=labels, node_shape='s', ax=ax)
 
