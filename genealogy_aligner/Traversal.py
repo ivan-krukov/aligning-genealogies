@@ -2,6 +2,7 @@ import networkx as nx
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
+from scipy.sparse import dok_matrix
 from collections import defaultdict
 
 from .Genealogical import Genealogical
@@ -126,6 +127,21 @@ class Traversal(Genealogical):
             dist[child][parent] = 1
         return dist
 
+    def distances_nx(self):
+        """Calculate distances between nodes in the Traversal using ``networkx``
+        Returns:
+            dict: ``distance[source][target]``"""
+        return dict(nx.all_pairs_shortest_path_length(nx.to_undirected(self.graph)))
+
+    def distance_matrix(self):
+        dim = max(self.nodes) + 1
+        D = dok_matrix((dim, dim))
+        gen = nx.all_pairs_shortest_path_length(nx.to_undirected(self.graph))
+        for source, table in gen:
+            for target, dist in table.items():
+                D[source, target] = dist
+        return D
+
     def parent_of(self, node):
         parents = list(self.graph.predecessors(node))
         return parents[0] if parents else None
@@ -140,7 +156,8 @@ class Traversal(Genealogical):
         """
         time = self.get_node_attr('time')
 
-        dist = self.distances()
+        #dist = self.distances()
+        dist = self.distances_nx()
         C = Traversal()
         C.generations = self.generations
         C.graph.add_nodes_from(self.probands(), time=0)
@@ -153,6 +170,8 @@ class Traversal(Genealogical):
                 if parent:
                     C.graph.add_node(parent, time=time[parent])
                     C.graph.add_edge(parent, node, weight=dist[node][parent])
+
+        C.graph.remove_nodes_from(list(nx.isolates(C.graph)))
         return C
 
         
