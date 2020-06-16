@@ -1,11 +1,17 @@
 import networkx as nx
-from genealogy_aligner import Pedigree, Traversal
+from genealogy_aligner import Pedigree, Traversal, Climber
 import numpy as np
+from collections import Counter
 import numpy.random as rnd
+import matplotlib.pyplot as plt
 
 
-rnd.seed(100)
-P = Pedigree.simulate_from_founders(10, 5)
+seed = rnd.randint(1000)
+rnd.seed(seed)
+print(f"Seed {seed}")
+generations = 10
+P = Pedigree.simulate_from_founders(200, generations, avg_immigrants=20)
+depth = P.infer_depth(forward=False)
 
 T = P.sample_haploid_path()
 C = T.to_coalescent()
@@ -19,56 +25,78 @@ K, idx = P.kinship_lange()
 
 prob_idx = [idx[p] for p in probands]
 
-R = Traversal()
-R.graph.add_nodes_from(probands)
+climber = Climber(P, source=probands)
+correct, incorrect, symmetries, total = Counter(), Counter(), Counter(), Counter()
 
-current_gen = set(probands)
+for agent, pedigree_parents in climber:
+    genealogy_parent = C.parent_of(agent)
+    if not pedigree_parents:
+        continue
+    if not genealogy_parent:
+        continue
 
-while current_gen:
-    next_gen = set()
-    for agent in current_gen:
-        print(agent)
-        pedigree_parents = list(P.predecessors(agent))
-        if not pedigree_parents:
-            continue
-        left_stat  = K[idx[pedigree_parents[0]], prob_idx]
-        right_stat = K[idx[pedigree_parents[1]], prob_idx]
+    left_stat  = K[idx[pedigree_parents[0]], prob_idx]
+    right_stat = K[idx[pedigree_parents[1]], prob_idx]
 
-        genealogy_parent = C.parent_of(agent)
-        if not genealogy_parent:
-            continue
-        
-        up_stat = D[genealogy_parent, probands]
+    up_stat = D[genealogy_parent, probands]
 
-        left = up_stat @ left_stat
-        right = up_stat @ right_stat
+    left = up_stat @ left_stat
+    right = up_stat @ right_stat
 
-        random_choice = False
-        if left > right:
-            choice = pedigree_parents[0]
-        elif left < right:
-            choice = pedigree_parents[1]
+    d = depth[agent] + 1
+    
+    if left > right:
+        choice = pedigree_parents[0]
+    elif left < right:
+        choice = pedigree_parents[1]
+    else:
+        rch = rnd.choice(2)
+        # print(agent, ' draw - random choice - ', pedigree_parents[rch])
+        choice = pedigree_parents[rch]
+        symmetries[d] += 1
+
+    climber.queue(choice)
+
+    # add node-to-edge alignment
+    if choice not in C.graph:
+        C.graph.add_node(choice, inferred=True)
+        C.graph.add_edge(choice, agent, inferred=True)
+        C.graph.add_edge(genealogy_parent, choice, inferred=True)
+
+    # check if correct
+    
+    try:
+        if choice == T.parent_of(agent):
+            correct[d] += 1
         else:
-            rch = rnd.choice(2)
-            print(agent, ' draw - random choice - ', pedigree_parents[rch])
-            random_choice = True
-            choice = pedigree_parents[rch]
-        if not random_choice:
-            try:
-                print(agent, T.predecessors(agent)[0] == choice)
-            except:
-                print(agent, False)
+            incorrect[d] += 1
+    except nx.NetworkXError:
+        incorrect[d] += 1
+    finally:
+        total[d] += 1
 
-        if choice not in C.graph:
-            C.graph.add_node(choice, inferred=True)
-            C.graph.add_edge(choice, agent, inferred=True)
-            C.graph.add_edge(genealogy_parent, choice, inferred=True)
+print(correct)
+print(incorrect)
+print(symmetries)
+print(total)
 
-        
-        R.graph.add_node(choice)
-        R.graph.add_edge(choice, agent)
-        next_gen.add(choice)
+def make_hist(counter, max_key):
+    bins = list(range(1, max_key+1))
+    values = [0 for _ in bins]
+    for i, b in enumerate(bins):
+        values[i] = counter[b]
+    return np.array(bins), np.array(values)
 
-    current_gen = next_gen
+x, y_correct = make_hist(correct, generations)
+x, y_incorrect = make_hist(incorrect, generations)
+x, y_symmetries = make_hist(symmetries, generations)
+x, y_total = make_hist(total, generations)
 
+fig, ax = plt.subplots()
+ax.set(ylim=(-0.05, 1.05), xlabel="Generation into past", ylabel="Percent", title=f"Seed {seed}, {generations} generations,  {P.n_individuals} in pedigree, {sum(y_total)} in genealogy")
+ax.plot(x, y_correct / y_total, label = "Correct")
+ax.plot(x, y_incorrect / y_total, label = "Incorrect")
+ax.plot(x, y_symmetries / y_total, label = "Symmetries")
 
+ax.legend()
+fig.savefig('fig/agent_example.png', dpi=300)
