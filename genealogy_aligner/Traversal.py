@@ -160,7 +160,7 @@ class Traversal(Genealogical):
         for t in range(self.generations):
             for node in C.nodes_at_generation(t):
                 parent = self.parent_of(node)
-                while parent and self.graph.out_degree(parent) != 2:
+                while parent and self.graph.out_degree(parent) < 2:
                     parent = self.parent_of(parent)
                 if parent:
                     C.graph.add_node(parent, time=time[parent])

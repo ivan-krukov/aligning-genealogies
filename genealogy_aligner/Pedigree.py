@@ -64,7 +64,7 @@ class Pedigree(Genealogical):
 
         return depth
 
-    def kinship_lange(self):
+    def kinship_lange(self, coefficient = 2):
         """Calculate the kinship matrix using the Lange kinship algorithm
 
         This algorithm uses the partial ordering from ``infer_depth()`` to assign indices in the output matrix
@@ -90,16 +90,16 @@ class Pedigree(Genealogical):
             if any(G.predecessors(node)):
                 mother, father = G.predecessors(node)
                 mat_idx, pat_idx = label_to_index[mother], label_to_index[father]
-                K[node_idx, node_idx] = 0.5 + (K[mat_idx, pat_idx]/2)
+                K[node_idx, node_idx] = (1 + K[mat_idx, pat_idx]) / coefficient
             else:
-                K[node_idx, node_idx] = 0.5
+                K[node_idx, node_idx] = 1/coefficient
                
             for relative_idx in range(node_idx+1, n):
                 relative = index_to_label[relative_idx]
                 if any(G.predecessors(relative)):
                     mother, father = G.predecessors(relative)
                     mat_idx, pat_idx = label_to_index[mother], label_to_index[father]
-                    v = (K[node_idx, mat_idx]/2) + (K[node_idx, pat_idx]/2)
+                    v = (K[node_idx, mat_idx] + K[node_idx, pat_idx]) / coefficient
                     K[node_idx, relative_idx] = v
                     K[relative_idx, node_idx] = v
 
