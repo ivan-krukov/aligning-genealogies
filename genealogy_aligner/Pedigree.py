@@ -238,7 +238,7 @@ class Pedigree(Genealogical):
             ped_df.columns = required_columns + attrs
         else:
             ped_df = pd.read_table(f_name, sep=sep,
-                                   names=required_columns + attrs)
+                                   names=required_columns + list(attrs))
 
         # -------------------------------------------------------
         # Checking validity of table:

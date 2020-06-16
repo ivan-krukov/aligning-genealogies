@@ -32,6 +32,17 @@ class Genealogical(object):
     def get_edge_attr(self, attr):
         return nx.get_edge_attributes(self.graph, attr)
 
+    def siblings(self, node):
+        """
+        Get the siblings of node `node`
+        :param node:
+        :return:
+        """
+        return list(set([
+            child for parent in self.predecessors(node)
+            for child in self.successors(parent) if child != node
+        ]))
+
     def predecessors(self, node, k=1, include_founders=False):
 
         nodes = [node]

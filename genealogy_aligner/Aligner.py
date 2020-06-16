@@ -1,4 +1,5 @@
 from gensim.models.poincare import PoincareModel
+import networkx as nx
 import copy
 import numpy as np
 
@@ -129,6 +130,69 @@ class MatchingAligner(Aligner):
             greedy_matching(np.array(pairs).T, np.array(scores))
         )
 
+    def harmonize(self, g_matching):
+        """
+        Helper method to harmonize greedy alignments.
+        :param g_matching:
+        :return:
+        """
+
+        # -------------------------------------------------------
+        # ** Step 1 **: Dealing with out-of-pedigree nodes
+        # = = = = = = = = =
+        # Plan of action: Check Two cases:
+        # [1] if a node is matched to a founder node
+        # in the pedigree, then all of its ancestors should be
+        # out-of-pedigree nodes.
+        # [2] if 2 nodes are connected in the tree sequence,
+        # they must be connected in the pedigree. Otherwise,
+        # their ancestors in the tree sequence are out-of-pedigree
+        # nodes.
+
+        # Case [1]:
+        ped_founders = self.ped.founders()
+
+        for ts_n, ped_n in g_matching.items():
+            if ped_n in ped_founders:
+                ts_n_pred = self.ts.predecessors(ts_n)
+
+                while len(ts_n_pred) > 0:
+                    curr_node = ts_n_pred[0]
+                    g_matching[curr_node] = None
+                    ts_n_pred.extend(self.ts.predecessors(curr_node))
+                    ts_n_pred = ts_n_pred[1:]
+
+        # Case [2]:
+        for ts_n1, ped_n1 in g_matching.items():
+
+            if ped_n1 is None:
+                continue
+
+            for ts_n2 in self.ts.siblings(ts_n1):
+                if ts_n2 in g_matching and g_matching[ts_n2] is not None:
+                    ped_n2 = g_matching[ts_n2]
+                    if nx.lowest_common_ancestor(self.ped.graph, ped_n1, ped_n2) is None:
+
+                        for ts_n in [ts_n1, ts_n2]:
+                            ts_n_pred = self.ts.predecessors(ts_n)
+                            while len(ts_n_pred) > 0:
+                                curr_node = ts_n_pred[0]
+                                g_matching[curr_node] = None
+                                ts_n_pred.extend(self.ts.predecessors(curr_node))
+                                ts_n_pred = ts_n_pred[1:]
+
+        # -------------------------------------------------------
+        # ** Step 2 **: Checking time-order of mappings
+        # = = = = = = = = =
+        # Plan of action:
+
+        # -------------------------------------------------------
+        # ** Step 3 **: Number of mappings checks
+        # = = = = = = = = =
+        # Plan of action:
+
+        return g_matching
+
 
 class DescMatchingAligner(MatchingAligner):
 
@@ -181,7 +245,7 @@ class DescMatchingAligner(MatchingAligner):
 
             unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
 
-        self.pred_ts_node_to_ped_node = mapped_ts
+        self.pred_ts_node_to_ped_node = self.harmonize(mapped_ts)
 
         return self.pred_ts_node_to_ped_node
 
@@ -235,6 +299,6 @@ class PoincareAligner(MatchingAligner):
 
             unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
 
-        self.pred_ts_node_to_ped_node = mapped_ts
+        self.pred_ts_node_to_ped_node = self.harmonize(mapped_ts)
 
         return self.pred_ts_node_to_ped_node
