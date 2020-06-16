@@ -14,7 +14,6 @@ def test_left_climber_single_source():
             path_taken.append(chosen_parent)
 
     assert path_taken == [8, 5, 1]
-
     
 
 def test_right_climber():
@@ -29,4 +28,4 @@ def test_right_climber():
             climber.queue(chosen_parent)
             path_taken.append(chosen_parent)
 
-    assert path_taken == [7, 8, 4, 6, 2]
+    assert path_taken == [7, 8, 6, 4, 2]

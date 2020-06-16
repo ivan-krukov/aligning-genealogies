@@ -88,7 +88,7 @@ class Genealogical(object):
                 return {}
 
     def nodes_at_generation_view(self, k):
-        time = self.get_node_attr('time')
+        time = self.get_node_attributes('time')
         G = self.graph
         return nx.subgraph_view(G, lambda n: time[n] == k)
 

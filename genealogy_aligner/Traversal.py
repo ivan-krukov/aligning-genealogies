@@ -149,7 +149,7 @@ class Traversal(Genealogical):
         Warning:
             This method is unstable
         """
-        time = self.get_node_attr('time')
+        time = self.get_node_attributes('time')
 
         # dist = self.distances()
         dist = self.distances_nx()
