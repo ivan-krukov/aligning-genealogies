@@ -52,16 +52,16 @@ def test_probands(pedigree, probands):
     "pedigree,bfs_fwd",
     [("simple", set([(1, 4), (1, 5), (2, 4), (2, 5), (3, 7), (4, 7), (5, 8), (6, 8)]))],
 )
-def test_iter_edges_forward(pedigree, bfs_fwd):
-    assert bfs_fwd == set(get_test_pedigree(pedigree).iter_edges())
+def test_trace_edges_forward(pedigree, bfs_fwd):
+    assert sorted(bfs_fwd) == sorted(get_test_pedigree(pedigree).trace_edges())
 
 
 @pytest.mark.parametrize(
     "pedigree,bfs_bwd",
     [("simple", set([(7, 3), (7, 4), (8, 5), (8, 6), (4, 1), (4, 2), (5, 1), (5, 2)]))],
 )
-def test_iter_edges_backward(pedigree, bfs_bwd):
-    assert bfs_bwd == set(get_test_pedigree(pedigree).iter_edges(forward=False))
+def test_trace_edges_backward(pedigree, bfs_bwd):
+    assert sorted(bfs_bwd) == sorted(get_test_pedigree(pedigree).trace_edges(forward=False))
 
 
 @pytest.mark.parametrize(
@@ -118,7 +118,7 @@ def test_depth_ordering(pedigree):
     ordered_labels = [next(label) for n in ordered_nodes]
     mapping = dict(zip(ordered_nodes, ordered_labels))
 
-    for parent, child in ped.iter_edges():
+    for parent, child in ped.trace_edges():
         assert mapping[parent] < mapping[child]
 
 
@@ -156,7 +156,7 @@ def test_depth_ordering_with_shuffle(pedigree):
     mapping = dict(zip(ordered_nodes, ordered_labels))
 
     # check oredring is correct
-    for parent, child in shuffled.iter_edges():
+    for parent, child in shuffled.trace_edges():
         assert mapping[parent] < mapping[child]
 
 
@@ -177,7 +177,7 @@ def test_sex(pedigree):
         ped_df.individual.values, ped_df.father.values, ped_df.mother.values
     )
 
-    expected_sex = ped.get_node_attr("sex")
+    expected_sex = ped.get_node_attributes("sex")
     # we can't infer the sex of probands
     mask = dict(zip(ped.probands(), repeat(-1)))
     expected_sex.update(mask)

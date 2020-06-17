@@ -116,7 +116,7 @@ class Traversal(Genealogical):
         Returns:
             dict: ``distance[target][source]``"""
         dist = defaultdict(dict)
-        for parent, child in self.iter_edges():
+        for parent, child in self.trace_edges():
             deep = defaultdict(dict)
             for source, d in dist[parent].items():
                 deep[child][source] = d + 1

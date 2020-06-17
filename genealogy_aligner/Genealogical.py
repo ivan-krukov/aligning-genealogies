@@ -29,7 +29,7 @@ class Genealogical(object):
     def attributes(self):
         return list(list(self.graph.nodes(data=True))[0][1].keys())
 
-    def get_edge_attr(self, attr):
+    def get_edge_attributes(self, attr):
         return nx.get_edge_attributes(self.graph, attr)
 
     def predecessors(self, node, k=1, include_founders=False):
@@ -113,9 +113,10 @@ class Genealogical(object):
         """Get a list of individuals with no children"""
         return list(self.probands_view().nodes)
 
-    def iter_edges(self, forward=True, source=None):
-        """Iterates edges in a breadth-first-search
+    def trace_edges(self, forward=True, source=None):
+        """Trace edges in a breadth-first-search
         Yields a pair of `(node, neighbor)`
+        Note that the same edge can appear in the tracing more than once
         For `forward=True` iteration, start at founders (nodes with no predecessors), and yield `(node, child)` pairs
         For `forward=False` iteration, start at probands (nodes with no successors), and yeild `(node, parent)` pairs.
         Optional `source` argument can be used to specify the starting nodes

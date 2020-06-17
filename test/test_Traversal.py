@@ -27,4 +27,4 @@ def test_traversal_to_coalescent_2():
     C = T.to_coalescent()
 
     assert sorted(list(C.nodes)) == [3,6,8,9,11]
-    assert C.get_edge_attr('weight') == {(3,6): 3, (3,8): 2, (6,9): 1, (6,11): 2}
+    assert C.get_edge_attributes('weight') == {(3,6): 3, (3,8): 2, (6,9): 1, (6,11): 2}

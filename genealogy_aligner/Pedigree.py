@@ -56,15 +56,15 @@ class Pedigree(Genealogical):
 
         """
         depth = defaultdict(int)
-        # forward is in the first (default) argument to iter_edges()
-        for node, child in self.iter_edges(forward=forward):
+        # forward is in the first (default) argument to trace_edges()
+        for node, child in self.trace_edges(forward=forward):
             d = depth[node]            
             if depth[child] <= d:
                 depth[child] = d + 1
 
         return depth
 
-    def kinship_lange(self, coefficient = 2):
+    def kinship_lange(self, coefficient = 2, progress=True):
         """Calculate the kinship matrix using the Lange kinship algorithm
 
         This algorithm uses the partial ordering from ``infer_depth()`` to assign indices in the output matrix
@@ -85,7 +85,7 @@ class Pedigree(Genealogical):
         n = len(G.nodes)
         K = np.zeros((n,n), dtype=float)
 
-        for node_idx in tqdm(range(n)):
+        for node_idx in tqdm(range(n), disable=not progress):
             node = index_to_label[node_idx]
             if any(G.predecessors(node)):
                 mother, father = G.predecessors(node)
@@ -304,8 +304,9 @@ class Pedigree(Genealogical):
                 tbl[node][attr] = attr_dict[node]
         
         sex = self.get_node_attributes('sex')
-        
-        for node, parent in self.iter_edges(forward=False):
+
+        # TODO - iterate once
+        for node, parent in self.trace_edges(forward=False):
 
             if sex[parent] == 1:
                 tbl[node]['father'] = parent
