@@ -43,6 +43,9 @@ class Genealogical(object):
             for child in self.successors(parent) if child != node
         ]))
 
+    def parents(self, node):
+        return list(self.graph.predecessors(node))
+
     def predecessors(self, node, k=1, include_founders=False):
 
         nodes = [node]
@@ -124,6 +127,7 @@ class Genealogical(object):
         """Get a list of individuals with no children"""
         return list(self.probands_view().nodes)
 
+
     def trace_edges(self, forward=True, source=None):
         """Trace edges in a breadth-first-search
         Yields a pair of `(node, neighbor)`
@@ -146,10 +150,11 @@ class Genealogical(object):
         -------
         pair of `(node, neighbor)` node IDs, for each edge
         """
-        if (source is None) and forward:
-            source = self.founders_view().nodes
-        elif (source is None) and (not forward):
-            source = self.probands_view().nodes
+        if source is None:
+            if forward:
+                source = self.founders_view().nodes
+            else:
+                source = self.probands_view().nodes
 
         neighbors = self.graph.successors if forward else self.graph.predecessors
         
@@ -168,10 +173,11 @@ class Genealogical(object):
     def iter_edges(self, forward=True, source=None):
         """Iterate all the edges of the genealogy, yielding each edge exactly once"""
         visited_edges = set()
-        if (source is None) and forward:
-            source = self.founders_view().nodes
-        elif (source is None) and (not forward):
-            source = self.probands_view().nodes
+        if source is None:
+            if forward:
+                source = self.founders_view().nodes
+            else:
+                source = self.probands_view().nodes
 
         neighbors = self.graph.successors if forward else self.graph.predecessors
 
@@ -179,6 +185,25 @@ class Genealogical(object):
             if (node, neighbor) not in visited_edges:
                 visited_edges.add((node, neighbor))
                 yield node, neighbor
+
+    def iter_nodes(self, forward=True, source=None):
+        if source is None:
+            if forward:
+                source = self.founders_view().nodes
+            else:
+                source = self.probands_view().nodes
+
+        visited_nodes = set()
+        # iterate source
+        for node in source:
+            if node not in visited_nodes:
+                visited_nodes.add(node)
+                yield node
+        # iterate neighbors (child or parent of each node, depending on direction)
+        for _, node in self.iter_edges(forward, source):
+            if node not in visited_nodes:
+                visited_nodes.add(node)
+                yield node
                 
 
     def get_probands_under(self, nodes=None, climb_up_step=0):

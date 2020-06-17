@@ -307,7 +307,6 @@ class Pedigree(Genealogical):
 
         for node, parent in self.iter_edges(forward=False):
 
-            # TODO: we can use infer_sex() here
             if sex[parent] == 1:
                 tbl[node]['father'] = parent
             elif sex[parent] == 2:
@@ -580,6 +579,16 @@ class Pedigree(Genealogical):
                     T.graph.add_edge(parent, node)
             
         return T
+
+    
+    def iter_trios(self):
+        sex = self.get_node_attributes('sex')
+        for node in self.iter_nodes():
+            parents = self.parents(node)
+            if parents:
+                sex_dict = {sex[p]: p for p in parents}
+                father, mother = sex_dict[1], sex_dict[2]
+                yield {'father': father, 'mother': mother, 'child': node}
 
     def draw(self, **kwargs):
         """Uses `graphviz` `dot` to plot the genealogy"""

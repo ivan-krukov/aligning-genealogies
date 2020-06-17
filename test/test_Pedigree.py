@@ -16,6 +16,20 @@ def get_test_pedigree_table(name):
     return pd.read_table("data/test/" + name + ".tsv")
 
 
+ALL_PEDIGREES = [
+    "disconnected",
+    "inbreeding",
+    "intergenerational",
+    "loop",
+    "loop_2",
+    "loop_3",
+    "multiple_founder",
+    "multiple_marriages",
+    "proband_different_generations",
+    "simple",
+]
+
+
 @pytest.mark.parametrize(
     "pedigree,founders",
     [
@@ -61,7 +75,9 @@ def test_trace_edges_forward(pedigree, bfs_fwd):
     [("simple", set([(7, 3), (7, 4), (8, 5), (8, 6), (4, 1), (4, 2), (5, 1), (5, 2)]))],
 )
 def test_trace_edges_backward(pedigree, bfs_bwd):
-    assert sorted(bfs_bwd) == sorted(get_test_pedigree(pedigree).trace_edges(forward=False))
+    assert sorted(bfs_bwd) == sorted(
+        get_test_pedigree(pedigree).trace_edges(forward=False)
+    )
 
 
 @pytest.mark.parametrize(
@@ -95,21 +111,7 @@ def test_depth_backward(pedigree, depth):
     assert integer_dict(depth) == get_test_pedigree(pedigree).infer_depth(forward=False)
 
 
-@pytest.mark.parametrize(
-    "pedigree",
-    [
-        "simple",
-        "disconnected",
-        "multiple_founder",
-        "multiple_marriages",
-        "proband_different_generations",
-        "loop",
-        "loop_2",
-        "loop_3",
-        "inbreeding",
-        "intergenerational",
-    ],
-)
+@pytest.mark.parametrize("pedigree", ALL_PEDIGREES)
 def test_depth_ordering(pedigree):
     label = count(1)
     ped = get_test_pedigree(pedigree)
@@ -122,21 +124,7 @@ def test_depth_ordering(pedigree):
         assert mapping[parent] < mapping[child]
 
 
-@pytest.mark.parametrize(
-    "pedigree",
-    [
-        "simple",
-        "disconnected",
-        "multiple_founder",
-        "multiple_marriages",
-        "proband_different_generations",
-        "loop",
-        "loop_2",
-        "loop_3",
-        "inbreeding",
-        "intergenerational",
-    ],
-)
+@pytest.mark.parametrize("pedigree", ALL_PEDIGREES)
 def test_depth_ordering_with_shuffle(pedigree):
     np.random.seed(100)
     label = count(1)
@@ -160,16 +148,7 @@ def test_depth_ordering_with_shuffle(pedigree):
         assert mapping[parent] < mapping[child]
 
 
-@pytest.mark.parametrize(
-    "pedigree",
-    [
-        "simple",
-        "disconnected",
-        "multiple_founder",
-        "proband_different_generations",
-        "loop",
-    ],
-)
+@pytest.mark.parametrize("pedigree", ALL_PEDIGREES)
 def test_sex(pedigree):
     ped_df = get_test_pedigree_table(pedigree)
     ped = get_test_pedigree(pedigree)
@@ -184,18 +163,7 @@ def test_sex(pedigree):
     assert integer_dict(inferred_sex) == expected_sex
 
 
-@pytest.mark.parametrize(
-    "pedigree",
-    [
-        "simple",
-        "disconnected",
-        "multiple_founder",
-        "proband_different_generations",
-        "loop",
-        "loop_2",
-        "loop_3",
-    ],
-)
+@pytest.mark.parametrize("pedigree", ALL_PEDIGREES)
 def test_kinship_calculation(pedigree):
     ped_df = get_test_pedigree_table(pedigree)
     ped = get_test_pedigree(pedigree)
@@ -269,24 +237,14 @@ def test_read_table_no_header():
     assert list(ped.graph.nodes) == list(range(1, 8 + 1))
 
 
-@pytest.mark.parametrize(
-"pedigree",
-[
-    "simple",
-    "disconnected",
-    "multiple_founder",
-    "proband_different_generations",
-    "loop",
-    "loop_2",
-    "loop_3",
-],)
+@pytest.mark.parametrize("pedigree", ALL_PEDIGREES)
 def test_to_table(pedigree):
     ped_df = get_test_pedigree_table(pedigree)
     ped = get_test_pedigree(pedigree)
 
     tbl = ped.to_table()
     tbl.reset_index(inplace=True)
-    
+
     assert np.all(ped_df.individual == tbl.individual)
     assert np.all(ped_df.father == tbl.father)
     assert np.all(ped_df.mother == tbl.mother)
@@ -294,15 +252,32 @@ def test_to_table(pedigree):
 
 
 def test_to_table_with_inferred_sex():
-    ped = Pedigree.from_balsac_table("data/test/simple.tsv")
-    ped_df = pd.read_table("data/test/simple.tsv")
+    ped_df = get_test_pedigree_table("simple")
+    ped = get_test_pedigree("simple")
+
     inferred_sex = Pedigree.infer_sex(ped_df.individual, ped_df.father, ped_df.mother)
-    nx.set_node_attributes(ped.graph, dict(zip(ped_df.individual, inferred_sex)), 'sex')
+    nx.set_node_attributes(ped.graph, dict(zip(ped_df.individual, inferred_sex)), "sex")
     tbl = ped.to_table()
     tbl.reset_index(inplace=True)
 
     assert np.all(ped_df.individual == tbl.individual)
     assert np.all(ped_df.father == tbl.father)
     assert np.all(ped_df.mother == tbl.mother)
-    assert np.all([1,2,2,1,2,1,-1,-1] == tbl.sex)
+    assert np.all([1, 2, 2, 1, 2, 1, -1, -1] == tbl.sex)
 
+
+@pytest.mark.parametrize("pedigree", ALL_PEDIGREES)
+def test_iter_nodes(pedigree):
+    ped = get_test_pedigree(pedigree)
+    assert sorted(list(ped.iter_nodes())) == sorted(ped.graph.nodes)
+
+
+def test_iter_trios():
+    ped = get_test_pedigree("simple")
+    expected_trios = [
+        {"father": 1, "mother": 2, "child": 4},
+        {"father": 1, "mother": 2, "child": 5},
+        {"father": 4, "mother": 3, "child": 7},
+        {"father": 6, "mother": 5, "child": 8},
+    ]
+    assert list(ped.iter_trios()) == expected_trios
