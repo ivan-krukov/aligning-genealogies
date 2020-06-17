@@ -1,4 +1,0 @@
-[submodule "msprime"]
-	path = msprime
-	url = https://github.com/DomNelson/msprime
-	branch = pedigree_ind_fix
