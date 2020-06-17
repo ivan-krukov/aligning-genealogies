@@ -7,12 +7,11 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 
 
-# seed = rnd.randint(1000)
-seed = 83
+seed = rnd.randint(1000)
 rnd.seed(seed)
 print(f"Seed {seed}")
 founders = 200
-generations = 10
+generations = 17
 P = Pedigree.simulate_from_founders(founders, generations, avg_immigrants=10)
 depth = P.infer_depth(forward=False)
 
@@ -31,39 +30,47 @@ K, idx = P.kinship_lange(coefficient=coefficient)
 
 prob_idx = [idx[p] for p in probands]
 
-climber = Climber(P, source=probands)
+
 correct, incorrect, symmetries, total = Counter(), Counter(), Counter(), Counter()
 agents = []
 
 R = deepcopy(C)
+
+# Climb the Pedigree starting at the probands
+climber = Climber(P, source=probands)
 for agent, pedigree_parents in climber:
-    agents.append(agent)
+    # get parent in the genealogy
     genealogy_parent = R.parent_of(agent)
+    # do nothing if done
     if not pedigree_parents:
         continue
     if not genealogy_parent:
         continue
 
+    # Get kinship statistics
     left_stat  = K[idx[pedigree_parents[0]], prob_idx]
     right_stat = K[idx[pedigree_parents[1]], prob_idx]
-
+    # Get tree statistic
     up_stat = D[genealogy_parent, probands]
 
+    # Combine
     left = up_stat @ left_stat
     right = up_stat @ right_stat
 
+    # bookkeeping
     d = depth[agent] + 1
-    
+
+    # Chose the larger combined statistic
     if left > right:
         choice = pedigree_parents[0]
     elif left < right:
         choice = pedigree_parents[1]
     else:
         rch = rnd.choice(2)
-        # print(agent, ' draw - random choice - ', pedigree_parents[rch])
         choice = pedigree_parents[rch]
         symmetries[d] += 1
 
+    # update the climber
     climber.queue(choice)
 
     # add node-to-edge alignment
@@ -73,7 +80,6 @@ for agent, pedigree_parents in climber:
         R.graph.add_edge(genealogy_parent, choice, inferred=True)
 
     # check if correct
-    
     try:
         if choice == T.parent_of(agent):
             correct[d] += 1
@@ -83,6 +89,10 @@ for agent, pedigree_parents in climber:
         incorrect[d] += 1
     finally:
         total[d] += 1
+
+    # bookkeeping
+    agents.append(agent)
+
 
 assert len(agents) == len(set(agents))
 
