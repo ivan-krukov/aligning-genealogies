@@ -269,20 +269,21 @@ def test_read_table_no_header():
     assert list(ped.graph.nodes) == list(range(1, 8 + 1))
 
 
-def test_to_table():
-    ped = Pedigree.from_balsac_table("data/test/simple.tsv")
-    ped_df = pd.read_table("data/test/simple.tsv")
-    tbl = ped.to_table()
-    tbl.reset_index(inplace=True)
-    
-    assert np.all(ped_df.individual == tbl.individual)
-    assert np.all(ped_df.father == tbl.father)
-    assert np.all(ped_df.mother == tbl.mother)
-    assert np.all(ped_df.sex == tbl.sex)
+@pytest.mark.parametrize(
+"pedigree",
+[
+    "simple",
+    "disconnected",
+    "multiple_founder",
+    "proband_different_generations",
+    "loop",
+    "loop_2",
+    "loop_3",
+],)
+def test_to_table(pedigree):
+    ped_df = get_test_pedigree_table(pedigree)
+    ped = get_test_pedigree(pedigree)
 
-def test_to_table_loop():
-    ped = Pedigree.from_balsac_table("data/test/loop.tsv")
-    ped_df = pd.read_table("data/test/loop.tsv")
     tbl = ped.to_table()
     tbl.reset_index(inplace=True)
     
