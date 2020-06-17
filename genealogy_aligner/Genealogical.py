@@ -127,6 +127,7 @@ class Genealogical(object):
     def trace_edges(self, forward=True, source=None):
         """Trace edges in a breadth-first-search
         Yields a pair of `(node, neighbor)`
+        Note:
         Note that the same edge can appear in the tracing more than once
         For `forward=True` iteration, start at founders (nodes with no predecessors), and yield `(node, child)` pairs
         For `forward=False` iteration, start at probands (nodes with no successors), and yeild `(node, parent)` pairs.
@@ -162,6 +163,23 @@ class Genealogical(object):
                     next_gen.add(neighbor)
             curr_gen = next_gen
             next_gen = set()
+
+
+    def iter_edges(self, forward=True, source=None):
+        """Iterate all the edges of the genealogy, yielding each edge exactly once"""
+        visited_edges = set()
+        if (source is None) and forward:
+            source = self.founders_view().nodes
+        elif (source is None) and (not forward):
+            source = self.probands_view().nodes
+
+        neighbors = self.graph.successors if forward else self.graph.predecessors
+
+        for node, neighbor in self.trace_edges(forward, source):
+            if (node, neighbor) not in visited_edges:
+                visited_edges.add((node, neighbor))
+                yield node, neighbor
+                
 
     def get_probands_under(self, nodes=None, climb_up_step=0):
 

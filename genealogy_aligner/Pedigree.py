@@ -306,7 +306,7 @@ class Pedigree(Genealogical):
         sex = self.get_node_attributes('sex')
 
         # TODO - iterate once
-        for node, parent in self.trace_edges(forward=False):
+        for node, parent in self.iter_edges(forward=False):
 
             if sex[parent] == 1:
                 tbl[node]['father'] = parent

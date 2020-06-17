@@ -280,6 +280,17 @@ def test_to_table():
     assert np.all(ped_df.mother == tbl.mother)
     assert np.all(ped_df.sex == tbl.sex)
 
+def test_to_table_loop():
+    ped = Pedigree.from_balsac_table("data/test/loop.tsv")
+    ped_df = pd.read_table("data/test/loop.tsv")
+    tbl = ped.to_table()
+    tbl.reset_index(inplace=True)
+    
+    assert np.all(ped_df.individual == tbl.individual)
+    assert np.all(ped_df.father == tbl.father)
+    assert np.all(ped_df.mother == tbl.mother)
+    assert np.all(ped_df.sex == tbl.sex)
+
 
 def test_to_table_with_inferred_sex():
     ped = Pedigree.from_balsac_table("data/test/simple.tsv")
