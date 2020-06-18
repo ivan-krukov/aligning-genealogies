@@ -58,22 +58,22 @@ class DiploidGraph(Pedigree):
         nx.draw_networkx_nodes(self.graph, pos=pos, ax=ax, node_shape='s',
                                node_size=node_size, nodelist=males)
         nx.draw_networkx_labels(self.graph, pos=pos, ax=ax, nodelist=males,
-                                font_size=12, font_color='white')
+                                font_size=12, font_color='white', labels=individuals)
 
         females = [node for node, ind in individuals.items() if sex[node] == 2]
         nx.draw_networkx_nodes(self.graph, pos=pos, ax=ax, node_shape='o',
                                node_size=node_size, nodelist=females)
         nx.draw_networkx_labels(self.graph, pos=pos, ax=ax, nodelist=females,
-                                font_size=12, font_color='white')
+                                font_size=12, font_color='white', labels=individuals)
 
         
         nx.draw_networkx_edges(self.graph, pos=pos, ax=ax, node_size=node_size)
 
         nx.draw_networkx_labels(self.graph, pos_left_nudge, ax=ax,
-                                labels = individuals, font_color='firebrick', font_size=12)
+                                font_color='firebrick', font_size=12)
 
 
-        subscript_patch = mpatches.Patch(color='firebrick', label='Individual ID')
+        subscript_patch = mpatches.Patch(color='firebrick', label='Ploid ID')
 
         ax.legend(handles=[subscript_patch], loc='lower right')
 
