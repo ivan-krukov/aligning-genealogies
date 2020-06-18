@@ -3,15 +3,17 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from .Drawing import get_graphviz_layout
-from .Genealogical import Genealogical
+from .Pedigree import Pedigree
 
 
-class DiploidGraph(Genealogical):
+class DiploidGraph(Pedigree):
 
     def __init__(self, P):
 
         D = nx.DiGraph()
+        
         super().__init__(D)
+        self.generations = P.generations
         
         sex = P.get_node_attributes('sex')
         
@@ -31,6 +33,11 @@ class DiploidGraph(Genealogical):
                               (m_mat, {'individual': mother, 'sex': 2}),
                               (c_mat, {'individual': child,  'sex': sex[child]})])
             self.graph.add_edges_from([(m_pat, c_mat), (m_mat, c_mat)])
+
+        # TODO
+        # it seems that we are actually not using this? It's assigned throughout, however
+        coalescent_depth = self.infer_depth(forward=False)
+        nx.set_node_attributes(self.graph, coalescent_depth, 'time')
 
             
 
