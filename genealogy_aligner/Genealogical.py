@@ -1,5 +1,7 @@
 import networkx as nx
 from collections.abc import Iterable
+from collections import defaultdict
+
 
 from .Drawing import draw
 import numpy as np
@@ -168,6 +170,35 @@ class Genealogical(object):
                     next_gen.add(neighbor)
             curr_gen = next_gen
             next_gen = set()
+
+
+    def infer_depth(self, forward = True):
+        """Infer depth of each node.
+
+        If ``forward=True``, founders (nodes without parents) have depth ``0``, each child: ``1 +
+        max(parental_depth)``
+
+        If ``forward=False``, probands (nodes without children) have depth ``0``, each parent: ``1 +
+        max(children_depth)``
+
+
+        Args:
+            forward=True: start at founders (no parents in pedigree), iterate descendants (down)
+            forward=False: start at probands (no children in pedigree), iterate parents (up)
+
+        Returns:
+            dict: mapping from nodes to depth
+
+        """
+        depth = defaultdict(int)
+        # forward is in the first (default) argument to trace_edges()
+        for node, child in self.trace_edges(forward=forward):
+            d = depth[node]            
+            if depth[child] <= d:
+                depth[child] = d + 1
+
+        return depth
+
 
 
     def iter_edges(self, forward=True, source=None):

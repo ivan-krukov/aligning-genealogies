@@ -2,7 +2,6 @@ import networkx as nx
 import msprime as msp
 from tqdm import tqdm
 from itertools import count
-from collections import defaultdict
 from scipy.sparse import dok_matrix
 
 import sys
@@ -37,32 +36,6 @@ class Pedigree(Genealogical):
         self.graph.add_edge(mat_id, child_id)
         self.graph.add_edge(pat_id, child_id)
 
-    def infer_depth(self, forward = True):
-        """Infer depth of each node.
-
-        If ``forward=True``, founders (nodes without parents) have depth ``0``, each child: ``1 +
-        max(parental_depth)``
-
-        If ``forward=False``, probands (nodes without children) have depth ``0``, each parent: ``1 +
-        max(children_depth)``
-
-
-        Args:
-            forward=True: start at founders (no parents in pedigree), iterate descendants (down)
-            forward=False: start at probands (no children in pedigree), iterate parents (up)
-
-        Returns:
-            dict: mapping from nodes to depth
-
-        """
-        depth = defaultdict(int)
-        # forward is in the first (default) argument to trace_edges()
-        for node, child in self.trace_edges(forward=forward):
-            d = depth[node]            
-            if depth[child] <= d:
-                depth[child] = d + 1
-
-        return depth
 
     def kinship_lange(self, coefficient = 2, progress=True):
         """Calculate the kinship matrix using the Lange kinship algorithm
