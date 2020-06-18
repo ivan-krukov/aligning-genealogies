@@ -28,11 +28,11 @@ class Pedigree(Genealogical):
         self.graph.add_node(mat_id, time=time)
         self.graph.add_node(pat_id, time=time)
 
-    def add_individual(self, ind_id, time):
-        self.graph.add_node(ind_id, time=time)
+    def add_individual(self, ind_id, time, sex=None):
+        self.graph.add_node(ind_id, time=time, sex=sex)
 
-    def add_child(self, child_id, mat_id, pat_id, time):
-        self.graph.add_node(child_id, time=time)
+    def add_child(self, child_id, mat_id, pat_id, time, sex=None):
+        self.graph.add_node(child_id, time=time, sex=sex)
         self.graph.add_edge(mat_id, child_id)
         self.graph.add_edge(pat_id, child_id)
 
@@ -453,6 +453,93 @@ class Pedigree(Genealogical):
             ped.graph = nx.subgraph(ped.graph, largest)
 
         return ped
+
+
+    @classmethod
+    def simulate_from_founders_with_sex(cls, n_founders, n_generations, avg_offspring=2, avg_immigrants=2):
+        ped = cls()
+        ped.generations = n_generations
+        
+        rng = rnd.default_rng()
+        current_males, current_females = [], []
+        next_males, next_females = [], []
+
+        id_counter = count(1)
+
+        # assign sex to the founder generation
+        for _ in range(n_founders):
+            ind_id = next(id_counter)
+            male = rng.random() < 0.5
+            if male:
+                current_males.append(ind_id)
+                ped.graph.add_node(ind_id, time=n_generations, sex=1)
+            else:
+                current_females.append(ind_id)
+                ped.graph.add_node(ind_id, time=n_generations, sex=2)
+
+        for t in range(n_generations-1, -1, -1):
+
+            # pad the arrays if we have uneven sex ratio
+            diff = len(current_males) - len(current_females)
+            if diff > 0:
+                for _ in range(diff):
+                    ind_id = next(id_counter)
+                    current_females.append(ind_id)
+                    ped.graph.add_node(ind_id, time=t+1, sex=2)
+            elif diff < 0:
+                for _ in range(-diff):
+                    ind_id = next(id_counter)
+                    current_males.append(ind_id)
+                    ped.graph.add_node(ind_id, time=t+1, sex=1)
+
+            # Pick couples
+            while len(current_males) and len(current_females):
+                father = rnd.choice(current_males)
+                mother = rnd.choice(current_females)
+                current_males.remove(father)
+                current_females.remove(mother)
+                
+                n_children = rng.poisson(avg_offspring)
+
+                for ch in range(n_children):
+                    child_id = next(id_counter)
+                    child_male = rng.random() < 0.5
+                    if child_male:
+                        next_males.append(child_id)
+                        ped.add_child(child_id, mother, father, time=t, sex=1)
+                    else:
+                        next_females.append(child_id)
+                        ped.add_child(child_id, mother, father, time=t, sex=2)
+
+            # add extra out-of-family individuals - but not in the present
+            if t > 1:
+                n_immigrants = rnd.poisson(avg_immigrants)
+                for _ in range(n_immigrants):
+                    ind_id = next(id_counter)
+                    ind_male = rng.random() < 0.5
+                    if ind_male:
+                        next_males.append(ind_id)
+                        ped.add_individual(ind_id, t, sex=1)
+                    else:
+                        next_females.append(ind_id)
+                        ped.add_individual(ind_id, t, sex=2)
+
+            if not (next_males or next_females):
+                raise(RuntimeError('Simulation terminated at time t=' + str(t) +
+                                   ', (' + str(n_generations-t) +
+                                   ' generations from founders)'))
+            current_males = next_males
+            current_females = next_females
+            next_males = []
+            next_females = []
+        
+        if not nx.is_weakly_connected(ped.graph):
+            # if multiple subgraphs, return largest
+            largest = max(nx.weakly_connected_components(ped.graph), key=len)
+            ped.graph = nx.subgraph(ped.graph, largest)
+
+        return ped
+        
 
     def get_haplotypes(self, ploidy=2):
 
