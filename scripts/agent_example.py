@@ -1,5 +1,5 @@
 import networkx as nx
-from genealogy_aligner import Pedigree, Traversal, Climber
+from genealogy_aligner import *
 import numpy as np
 from collections import Counter
 import numpy.random as rnd
@@ -10,12 +10,13 @@ from copy import deepcopy
 seed = rnd.randint(1000)
 rnd.seed(seed)
 print(f"Seed {seed}")
-founders = 200
-generations = 17
-P = Pedigree.simulate_from_founders(founders, generations, avg_immigrants=10)
+founders = 50
+generations = 10
+P = Pedigree.simulate_from_founders_with_sex(founders, generations, avg_immigrants=20)
+D = DiploidGraph(P)
 depth = P.infer_depth(forward=False)
 
-T = P.sample_haploid_path()
+T = D.sample_haploid_path()
 coal_nodes = nx.subgraph_view(T.graph, lambda n: T.graph.out_degree(n) > 1).nodes
 
 C = T.to_coalescent()
@@ -24,9 +25,9 @@ probands = C.probands()
 dist = C.distance_matrix().todense()
 dist[dist == 0] = np.inf
 coefficient = 2.0
-D = np.power(coefficient, -dist)
+Q = np.power(coefficient, -dist)
 
-K, idx = P.kinship_lange(coefficient=coefficient)
+K, idx = D.kinship_lange(coefficient=coefficient)
 
 prob_idx = [idx[p] for p in probands]
 
@@ -37,7 +38,7 @@ agents = []
 R = deepcopy(C)
 
 # Climb the Pedigree starting at the probands
-climber = Climber(P, source=probands)
+climber = Climber(D, source=probands)
 for agent, pedigree_parents in climber:
     # get parent in the genealogy
     genealogy_parent = R.parent_of(agent)
@@ -51,7 +52,7 @@ for agent, pedigree_parents in climber:
     left_stat  = K[idx[pedigree_parents[0]], prob_idx]
     right_stat = K[idx[pedigree_parents[1]], prob_idx]
     # Get tree statistic
-    up_stat = D[genealogy_parent, probands]
+    up_stat = Q[genealogy_parent, probands]
 
     # Combine
     left = up_stat @ left_stat
