@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 from gensim.models.poincare import PoincareModel
 import networkx as nx
 import copy
@@ -148,6 +149,8 @@ class MatchingAligner(Aligner):
         # they must be connected in the pedigree. Otherwise,
         # their ancestors in the tree sequence are out-of-pedigree
         # nodes.
+        # I do believe this doesn't work for the diploid case
+
 
         # Case [1]:
         ped_founders = self.ped.founders()
@@ -184,14 +187,105 @@ class MatchingAligner(Aligner):
         # -------------------------------------------------------
         # ** Step 2 **: Checking time-order of mappings
         # = = = = = = = = =
-        # Plan of action:
+        # Plan of action: For an aligned pair (n_ts, n_ped),
+        # make sure that their successors and predecessors preserve their time-ordering.
 
-        # -------------------------------------------------------
-        # ** Step 3 **: Number of mappings checks
-        # = = = = = = = = =
-        # Plan of action:
+        for ts_n, ped_n in g_matching.items():
+            ts_pred_list = self.ts.predecessors ( ts_n )
+            ped_pred_list = self.ped.predecessors ( ped_n )
+            ts_succ_list = self.ts.successors ( ts_n )
+            ped_succ_list = self.ped.successors ( ped_n )
+
+            ts_n_time = self.ts.get_node_attributes ( 'time', ts_n_succ )
+            ped_n_time = self.ped.get_node_attributes ( 'time', ts_n_succ )
+
+            #Preserving time ordering of predecessors: Regardless of how we infer time,
+            # times of predecesssor at pedigree and tree sequence, must be both larger or
+            # both smaller than current time.
+            for ts_n_pred in ts_pred_list:
+                for ped_n_pred in ped_pred_list:
+                    if ((ts_n_pred is None) or (ped_n_pred is None)):
+                        continue
+                    else:
+                        ts_n_pred_time = self.ts.get_node_attributes ( 'time', ts_n_pred )
+                        ped_n_pred_time = self.ped.get_node_attributes ( 'time', ped_n_pred )
+
+                    if (ts_n_pred_time != ped_n_pred_time):
+                        g_matching[ts_n_pred] = None
+
+                    if ((ts_n_pred_time - ts_n_time) *
+                        (ped_n_pred_time - ped_n_time) < 0):
+                        g_matching[ts_n_pred] = None
+
+            #Preserving time ordering of successors
+            for ts_n_succ in ts_succ_list:
+                for ped_n_succ in ped_succ_list:
+                    if ((ts_n_succ is None) or (ped_n_succ is None)):
+                        continue
+                    else:
+                        ts_n_succ_time = self.ts.get_node_attributes ( 'time', ts_n_succ )
+                        ped_n_succ_time = self.ped.get_node_attributes ( 'time', ped_n_succ )
+
+                    if (ts_n_succ_time != ped_n_succ_time):
+                        g_matching[ts_n_succ] = None
+
+                    if ((ts_n_time - ts_n_succ_time) *
+                            (ped_n_time - ped_n_succ_time) < 0):
+                        g_matching[ts_n_succ] = None
+
+            #Check if predecessors and successors mutually preserve the time ordering:
+            for ts_n_succ in ts_succ_list:
+                for ts_n_pred in ts_pred_list:
+                    if not (((self.ts.get_node_attributes ( 'time', ts_n_succ ) > ts_n) and (ts_n > self.ts.get_node_attributes ( 'time', ts_n_pred )))
+                    or ((self.ts.get_node_attributes ( 'time', ts_n_succ ) < ts_n) and (ts_n < self.ts.get_node_attributes ( 'time', ts_n_pred )))):
+                        g_matching[ts_n_succ] = g_matching[ts_n_pred] = None
+
 
         return g_matching
+
+
+    def harmonizeByPloidy(self, g_matching, ploidy):
+            """
+            Helper method to harmonize greedy alignments.
+            :param g_matching:
+            :param ploidy: gets value 1 for haploid and value 2 for diploid case
+            :return:
+            """
+        # -------------------------------------------------------
+        # ** Step 1 **: Number of mappings checks
+        # = = = = = = = = =
+        # Plan of action: In the diploid case, each individual in the pedigree is assigned to only 2
+        # different nodes in the tree sequence. In the haploid case, it is 1.
+
+
+            for ped_n in g_matching.items():
+                    if ped_n in g_matching and g_matching[ped_n] is not None:
+                        if (g_matching[ped_n].len() == ploidy): #number of assigned tree sequence nodes
+                            continue
+                        else:
+                            g_matching[ped_n] = None
+
+        # -------------------------------------------------------
+        # ** Step 2 **: Number of mappings checks
+        # = = = = = = = = =
+        # Plan of action: In the diploid case, if an individual in the pedigree is assigned to 2
+        # nodes in the tree sequence, then those nodes cannot be ancestral to each
+        #other (they have to be on separate branches of the tree).
+
+            for ped_n in g_matching.items():
+                if ped_n in g_matching and g_matching[ped_n] is not None:
+                    if (ploidy == 2 and g_matching[ped_n].len() == 2):
+                        if not (g_matching[ped_n][1] in self.ts.predecessors([g_matching[ped_n][2]])
+                            or g_matching[ped_n][2] in self.ts.predecessors([g_matching[ped_n][1]])):
+                                continue
+                        else:
+                            g_matching[ped_n] = None
+
+
+            return g_matching
+
+
+
 
 
 class DescMatchingAligner(MatchingAligner):
