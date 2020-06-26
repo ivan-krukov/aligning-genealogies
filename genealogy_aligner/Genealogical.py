@@ -232,7 +232,7 @@ class Genealogical(object):
                 visited_nodes.add(node)
                 yield node
 
-    def get_num_paths_to_target(self, target=None):
+    def get_num_paths_to_target(self, target=None, include_target=True):
         """
         Get the number of paths connecting all nodes in a Genealogical object
         to the `target` nodes. If `target` is None, use the probands
@@ -266,6 +266,10 @@ class Genealogical(object):
                 )
 
         pts = {k: dict(v) for k, v in pts.items() if len(v) > 0}
+
+        if not include_target:
+            for t in target:
+                del pts[t]
 
         return pts
 
