@@ -1,6 +1,6 @@
 import networkx as nx
 from collections.abc import Iterable
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 
 from .Drawing import draw
@@ -129,7 +129,6 @@ class Genealogical(object):
         """Get a list of individuals with no children"""
         return list(self.probands_view().nodes)
 
-
     def trace_edges(self, forward=True, source=None):
         """Trace edges in a breadth-first-search
         Yields a pair of `(node, neighbor)`
@@ -171,7 +170,6 @@ class Genealogical(object):
             curr_gen = next_gen
             next_gen = set()
 
-
     def infer_depth(self, forward = True):
         """Infer depth of each node.
 
@@ -198,8 +196,6 @@ class Genealogical(object):
                 depth[child] = d + 1
 
         return depth
-
-
 
     def iter_edges(self, forward=True, source=None):
         """Iterate all the edges of the genealogy, yielding each edge exactly once"""
@@ -235,7 +231,43 @@ class Genealogical(object):
             if node not in visited_nodes:
                 visited_nodes.add(node)
                 yield node
-                
+
+    def get_num_paths_to_target(self, target=None):
+        """
+        Get the number of paths connecting all nodes in a Genealogical object
+        to the `target` nodes. If `target` is None, use the probands
+        by default.
+
+        This method is an optimized version of the `get_probands_under()` method,
+        with O(n) runtime.
+        """
+
+        if target is None:
+            target = self.probands()
+        elif not isinstance(target, Iterable) or type(target) == str:
+            target = [target]
+
+        pts = {}
+        nodes = self.infer_depth()
+
+        for n in sorted(nodes, key=nodes.get, reverse=True):
+
+            n_succ = self.successors(n)
+
+            if n in target:
+                pts[n] = {n: 1}
+            elif len(n_succ) == 0:
+                pts[n] = {}
+            else:
+
+                pts[n] = sum(
+                    (Counter(pts[suc]) for suc in n_succ),
+                    Counter()
+                )
+
+        pts = {k: dict(v) for k, v in pts.items() if len(v) > 0}
+
+        return pts
 
     def get_probands_under(self, nodes=None, climb_up_step=0):
 
