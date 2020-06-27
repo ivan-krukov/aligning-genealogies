@@ -5,7 +5,7 @@ import copy
 import numpy as np
 
 from .evaluation import accuracy
-from .utils import greedy_matching
+from .utils import greedy_matching, invert_dictionary
 from .Drawing import draw_aligner
 
 
@@ -20,6 +20,8 @@ class Aligner(object):
 
         self.ped = ped
         self.ts = ts
+
+        self.ploidy = self.ts.ploidy
 
         self.ped_probands = self.ped.probands()
         self.ped_nonprobands = list(set(self.ped.nodes) - set(self.ped_probands))
@@ -47,13 +49,28 @@ class Aligner(object):
 
     def evaluate(self):
 
+        metrics = {}
+
         if self.pred_ts_node_to_ped_node is None:
             raise Exception("No pairs are predicted to be aligned. Call `align` first.")
+        else:
+            metrics['Node-Node Matching Accuracy'] = accuracy(
+                self.true_ts_node_to_ped_node.items(),
+                self.pred_ts_node_to_ped_node.items()
+            )
 
-        metrics = {
-            'accuracy': accuracy(self.true_ts_node_to_ped_node.items(),
-                                 self.pred_ts_node_to_ped_node.items())
-        }
+        if self.pred_ped_node_to_ts_edge is None:
+            if self.true_ped_node_to_ts_edge is None:
+                metrics['Node-Edge Matching Accuracy'] = None
+            elif len(self.true_ped_node_to_ts_edge) == 0:
+                metrics['Node-Edge Matching Accuracy'] = None
+            else:
+                metrics['Node-Edge Matching Accuracy'] = 0.0
+        else:
+            metrics['Node-Edge Matching Accuracy'] = accuracy(
+                self.true_ped_node_to_ts_edge.items(),
+                self.pred_ped_node_to_ts_edge.items()
+            )
 
         return metrics
 
@@ -131,6 +148,45 @@ class MatchingAligner(Aligner):
             greedy_matching(np.array(pairs).T, np.array(scores))
         )
 
+    def complete_paths(self):
+
+        m_dict = self.pred_ts_node_to_ped_node.copy()
+        m_dict.update(self.ts_proband_to_ped_proband)
+
+        rev_m_dict = invert_dictionary(m_dict)
+
+        matched_nodes = rev_m_dict.keys()
+
+        if len(matched_nodes) == 0:
+            raise Exception("No matched nodes. Call `.align()` first.")
+
+        nn_nodes_to_edges = {}
+
+        for n in self.ped.nodes:
+
+            if n in rev_m_dict:
+                if len(rev_m_dict[n]) >= self.ploidy:
+                    continue
+
+            # [1] Simple case: If a pedigree node is sandwiched between 2
+            # matched nodes, and there's an edge between those 2 nodes in the
+            # tree sequence, then assign the pedigree node to that edge.
+
+            pred = self.ped.predecessors(n)
+            succ = self.ped.successors(n)
+
+            for p in pred:
+                for s in succ:
+                    if p in matched_nodes and s in matched_nodes:
+                        for ts_n1 in rev_m_dict[p]:
+                            for ts_n2 in rev_m_dict[s]:
+                                if ts_n2 in self.ts.successors(ts_n1):
+                                    nn_nodes_to_edges[n] = (ts_n1, ts_n2)
+
+        self.pred_ped_node_to_ts_edge = nn_nodes_to_edges
+
+        return self.pred_ped_node_to_ts_edge
+
     def harmonize(self, g_matching):
         """
         Helper method to harmonize greedy alignments.
@@ -190,6 +246,7 @@ class MatchingAligner(Aligner):
         # Plan of action: For an aligned pair (n_ts, n_ped),
         # make sure that their successors and predecessors preserve their time-ordering.
 
+        """
         for ts_n, ped_n in g_matching.items():
             ts_pred_list = self.ts.predecessors ( ts_n )
             ped_pred_list = self.ped.predecessors ( ped_n )
@@ -239,7 +296,7 @@ class MatchingAligner(Aligner):
                     if not (((self.ts.get_node_attributes ( 'time', ts_n_succ ) > ts_n) and (ts_n > self.ts.get_node_attributes ( 'time', ts_n_pred )))
                     or ((self.ts.get_node_attributes ( 'time', ts_n_succ ) < ts_n) and (ts_n < self.ts.get_node_attributes ( 'time', ts_n_pred )))):
                         g_matching[ts_n_succ] = g_matching[ts_n_pred] = None
-
+        """
 
         return g_matching
 
@@ -283,9 +340,6 @@ class MatchingAligner(Aligner):
 
 
             return g_matching
-
-
-
 
 
 class DescMatchingAligner(MatchingAligner):
