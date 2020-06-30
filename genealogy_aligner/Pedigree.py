@@ -36,6 +36,20 @@ class Pedigree(Genealogical):
         self.graph.add_edge(mat_id, child_id)
         self.graph.add_edge(pat_id, child_id)
 
+    def spouse(self, node):
+        """
+        For a given `node`, find its list of spouses in the pedigree
+        """
+
+        spouses = list(set([
+            parent for child in self.successors(node)
+            for parent in self.predecessors(child) if parent != node
+        ]))
+
+        if len(spouses) == 0:
+            return [0]
+        else:
+            return spouses
 
     def kinship_lange(self, coefficient = 2, progress=True):
         """Calculate the kinship matrix using the Lange kinship algorithm

@@ -48,41 +48,55 @@ class Genealogical(object):
     def parents(self, node):
         return list(self.graph.predecessors(node))
 
-    def predecessors(self, node, k=1, include_founders=False):
+    def predecessors(self, node, k=1, include_intermediates=False, include_founders=False):
+        """
+        Get predecessors that are up to `k` steps away from `node`. If `include_intermediates`
+        is true, this method also returns nodes that are <`k` steps away from `node`. If
+        `include_founders` is True, this method returns founders that are less than `k`
+        steps away from `node`.
+        """
 
-        nodes = [node]
-        while k > 0:
-            new_nodes = []
+        predecessors = nx.single_source_shortest_path_length(self.graph.reverse(), node,
+                                                             cutoff=k)
 
-            for n in nodes:
-                pred_list = list(self.graph.predecessors(n))
-                if len(pred_list) == 0 and include_founders:
-                    new_nodes.append(n)
-                else:
-                    new_nodes += pred_list
+        if include_intermediates:
+            return list(predecessors.keys())
+        else:
 
-            nodes = new_nodes
-            k -= 1
+            pred_list = []
 
-        return nodes
+            for nn, dist in predecessors.items():
+                if dist == k:
+                    pred_list.append(nn)
+                elif include_founders and len(self.graph.predecessors(nn)) == 0:
+                    pred_list.append(nn)
 
-    def successors(self, node, k=1, include_leaves=False):
+            return pred_list
 
-        nodes = [node]
-        while k > 0:
-            new_nodes = []
+    def successors(self, node, k=1, include_intermediates=False, include_leaves=False):
+        """
+        Get successors that are up to `k` steps away from `node`. If `include_intermediates`
+        is true, this method also returns nodes that are <`k` steps away from `node`. If
+        `include_leaves` is True, this method returns leaves that are less than `k`
+        steps away from `node`.
+        """
 
-            for n in nodes:
-                succ_list = list(self.graph.successors(n))
-                if len(succ_list) == 0 and include_leaves:
-                    new_nodes.append(n)
-                else:
-                    new_nodes += succ_list
+        successors = nx.single_source_shortest_path_length(self.graph, node,
+                                                           cutoff=k)
 
-            nodes = new_nodes
-            k -= 1
+        if include_intermediates:
+            return list(successors.keys())
+        else:
 
-        return nodes
+            succ_list = []
+
+            for nn, dist in successors.items():
+                if dist == k:
+                    succ_list.append(nn)
+                elif include_leaves and len(self.graph.successors(nn)) == 0:
+                    succ_list.append(nn)
+
+            return succ_list
 
     def filter_nodes(self, predicate):
         node_list = []
@@ -170,7 +184,7 @@ class Genealogical(object):
             curr_gen = next_gen
             next_gen = set()
 
-    def infer_depth(self, forward = True):
+    def infer_depth(self, forward=True):
         """Infer depth of each node.
 
         If ``forward=True``, founders (nodes without parents) have depth ``0``, each child: ``1 +

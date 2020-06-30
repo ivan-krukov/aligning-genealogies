@@ -1,11 +1,10 @@
 from __future__ import absolute_import
-from gensim.models.poincare import PoincareModel
 import networkx as nx
 import copy
 import numpy as np
 
-from .evaluation import accuracy
-from .utils import greedy_matching, invert_dictionary
+from .evaluation import accuracy, simple_symmetries
+from .utils import greedy_matching, soft_ordering, invert_dictionary
 from .Drawing import draw_aligner
 
 
@@ -58,6 +57,12 @@ class Aligner(object):
                 self.true_ts_node_to_ped_node.items(),
                 self.pred_ts_node_to_ped_node.items()
             )
+
+        metrics['Proportion of Simple Symmetries'] = simple_symmetries(
+            self.ped,
+            self.true_ts_node_to_ped_node,
+            self.pred_ts_node_to_ped_node
+        )
 
         if self.pred_ped_node_to_ts_edge is None:
             if self.true_ped_node_to_ts_edge is None:
@@ -112,18 +117,36 @@ class MatchingAligner(Aligner):
     def __init__(self, ped, ts):
         super().__init__(ped, ts)
 
-    @staticmethod
-    def match(ped_dict, ts_dict):
+    def match(self, ped_dict, ts_dict):
         """
-        The match method takes 2 dictionaries from the
+        Applies greedy matching to the scoring results
+        """
+
+        return dict(
+            greedy_matching(*self.score(ped_dict, ts_dict))
+        )
+
+    def soft_order(self, ped_dict, ts_dict):
+        """
+        Applies soft ordering to the scoring results
+        """
+
+        return soft_ordering(
+            *self.score(ped_dict, ts_dict), return_confidence=True
+        )
+
+    @staticmethod
+    def score(ped_dict, ts_dict):
+        """
+        The score method takes 2 dictionaries from the
         pedigree and tree sequence graphs.
         Each dictionary consists of the following key and value pairs
         * key: The key is the name of the non-aligned node
         * value: A set of the closest aligned nodes to it. What is
         meant by 'closest' and how many items in the set are left
-        for the child classes to decide.
+        for the child classes to define.
 
-        For the matching to work, ensure that the set of closest
+        For the scoring to work, ensure that the set of closest
         haplotypes in the tree sequence dictionary are mapped
         to the corresponding subjects
         using the self.ts_proband_to_ped_proband dictionary.
@@ -144,9 +167,7 @@ class MatchingAligner(Aligner):
                 pairs += [[n_ts, n_ped]]
                 scores.append(score)
 
-        return dict(
-            greedy_matching(np.array(pairs).T, np.array(scores))
-        )
+        return np.array(pairs).T, np.array(scores)
 
     def complete_paths(self):
 
@@ -187,12 +208,34 @@ class MatchingAligner(Aligner):
 
         return self.pred_ped_node_to_ts_edge
 
-    def harmonize(self, g_matching):
+    def harmonize(self, g_matching, s_matching):
         """
         Helper method to harmonize greedy alignments.
-        :param g_matching:
-        :return:
         """
+
+        # -------------------------------------------------------
+        # ** Step 0 **: Number of mappings checks
+        # = = = = = = = = =
+        # Plan of action: In the diploid case, each individual in the pedigree is assigned to only 2
+        # different nodes in the tree sequence. In the haploid case, it is 1.
+
+        # invert the matching dictionary:
+        rev_g_matching = invert_dictionary(g_matching)
+
+        for ped_n, ts_n_li in rev_g_matching.items():
+            if ped_n is not None and len(ts_n_li) > self.ploidy:
+
+                ts_n_li = sorted(
+                    ts_n_li,
+                    key=lambda x: [sc for p_n, sc in s_matching[x] if p_n == ped_n][0],
+                    reverse=True
+                )
+
+                for ts_n in ts_n_li[2:]:
+                    for ped_n2, sc in s_matching[ts_n]:
+                        if ped_n2 in rev_g_matching:
+                            if ped_n2 != ped_n and len(rev_g_matching[ped_n2]) < self.ploidy:
+                                g_matching[ts_n] = ped_n2
 
         # -------------------------------------------------------
         # ** Step 1 **: Dealing with out-of-pedigree nodes
@@ -206,12 +249,11 @@ class MatchingAligner(Aligner):
         # their ancestors in the tree sequence are out-of-pedigree
         # nodes.
         # I do believe this doesn't work for the diploid case
-
-
         # Case [1]:
         ped_founders = self.ped.founders()
 
-        for ts_n, ped_n in g_matching.items():
+        for ts_n in list(g_matching):
+            ped_n = g_matching[ts_n]
             if ped_n in ped_founders:
                 ts_n_pred = self.ts.predecessors(ts_n)
 
@@ -222,7 +264,9 @@ class MatchingAligner(Aligner):
                     ts_n_pred = ts_n_pred[1:]
 
         # Case [2]:
-        for ts_n1, ped_n1 in g_matching.items():
+        for ts_n1 in list(g_matching):
+
+            ped_n1 = g_matching[ts_n1]
 
             if ped_n1 is None:
                 continue
@@ -241,7 +285,36 @@ class MatchingAligner(Aligner):
                                 ts_n_pred = ts_n_pred[1:]
 
         # -------------------------------------------------------
-        # ** Step 2 **: Checking time-order of mappings
+        # ** Step 2 **: Logical check for diploid matchings:
+        # = = = = = = = = =
+        # Plan of action: In the diploid case, if an individual in the pedigree is assigned to 2
+        # nodes in the tree sequence, then those nodes cannot be ancestral to each
+        # other (they have to be on separate branches of the tree).
+        #
+        # TODO: This code is broken and causes infinite loops.
+
+        """
+        if self.ploidy == 2:
+
+            # Invert the matching dictionary
+            rev_g_matching = invert_dictionary(g_matching)
+
+            for ped_n, ts_n_li in rev_g_matching.items():
+                # If there are 2 items in the list:
+                if len(ts_n_li) == 2:
+                    # If the first item is ancestral to the second:
+                    if ts_n_li[0] in self.ts.predecessors(ts_n_li[1],
+                                                          k=None,
+                                                          include_intermediates=True):
+                        del g_matching[ts_n_li[0]]
+                    # If the second item is ancestral to the first:
+                    elif ts_n_li[1] in self.ts.predecessors(ts_n_li[0],
+                                                            k=None,
+                                                            include_intermediates=True):
+                        del g_matching[ts_n_li[1]]
+        """
+        # -------------------------------------------------------
+        # ** Step 3 **: Checking time-order of mappings
         # = = = = = = = = =
         # Plan of action: For an aligned pair (n_ts, n_ped),
         # make sure that their successors and predecessors preserve their time-ordering.
@@ -301,47 +374,6 @@ class MatchingAligner(Aligner):
         return g_matching
 
 
-    def harmonizeByPloidy(self, g_matching, ploidy):
-            """
-            Helper method to harmonize greedy alignments.
-            :param g_matching:
-            :param ploidy: gets value 1 for haploid and value 2 for diploid case
-            :return:
-            """
-        # -------------------------------------------------------
-        # ** Step 1 **: Number of mappings checks
-        # = = = = = = = = =
-        # Plan of action: In the diploid case, each individual in the pedigree is assigned to only 2
-        # different nodes in the tree sequence. In the haploid case, it is 1.
-
-
-            for ped_n in g_matching.items():
-                    if ped_n in g_matching and g_matching[ped_n] is not None:
-                        if (g_matching[ped_n].len() == ploidy): #number of assigned tree sequence nodes
-                            continue
-                        else:
-                            g_matching[ped_n] = None
-
-        # -------------------------------------------------------
-        # ** Step 2 **: Number of mappings checks
-        # = = = = = = = = =
-        # Plan of action: In the diploid case, if an individual in the pedigree is assigned to 2
-        # nodes in the tree sequence, then those nodes cannot be ancestral to each
-        #other (they have to be on separate branches of the tree).
-
-            for ped_n in g_matching.items():
-                if ped_n in g_matching and g_matching[ped_n] is not None:
-                    if (ploidy == 2 and g_matching[ped_n].len() == 2):
-                        if not (g_matching[ped_n][1] in self.ts.predecessors([g_matching[ped_n][2]])
-                            or g_matching[ped_n][2] in self.ts.predecessors([g_matching[ped_n][1]])):
-                                continue
-                        else:
-                            g_matching[ped_n] = None
-
-
-            return g_matching
-
-
 class DescMatchingAligner(MatchingAligner):
 
     def __init__(self, ped, ts, iterative=True, climb_up_step=0):
@@ -372,48 +404,10 @@ class DescMatchingAligner(MatchingAligner):
                      for tsn in self.ts_probands}
         unmapped_ts = self.ts_nonprobands
 
-        ts_node_time = self.ts.get_node_attributes('time')
-
-        while len(unmapped_ts) > 0:
-
-            if self.iterative:
-                # Find the closest nodes to the mapped nodes by time difference:
-                unmapped_time = {n: ts_node_time[n] for n in unmapped_ts}
-                min_t = min(unmapped_time.values())
-                closest_unmapped = [n for n in unmapped_time if ts_node_time[n] == min_t]
-            else:
-                closest_unmapped = unmapped_ts
-
-            mapped_ts.update(
-                self.match(
-                    {n_ped: ped_ntp[n_ped] for n_ped in self.ped_nonprobands},
-                    {n_ts: ts_ntp[n_ts] for n_ts in closest_unmapped}
-                )
-            )
-
-            unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
-
-        self.pred_ts_node_to_ped_node = self.harmonize(mapped_ts)
-
-        return self.pred_ts_node_to_ped_node
-
-
-class PoincareAligner(MatchingAligner):
-
-    def __init__(self, ped, ts, iterative=True, size=10, k=5):
-        super().__init__(ped, ts)
-        self.iterative = True
-        self.size = size
-        self.k = k
-
-    def align(self):
-
-        ped_model = PoincareModel(self.ped.edges, size=self.size, negative=2)
-        ts_model = PoincareModel(self.ts.edges, size=self.size, negative=2)
-
-        mapped_ts = {tsn: self.true_ts_node_to_ped_node[tsn]
-                     for tsn in self.ts_probands}
-        unmapped_ts = self.ts_nonprobands
+        scoring_dict = self.soft_order(
+            {n_ped: ped_ntp[n_ped] for n_ped in self.ped_nonprobands},
+            {n_ts: ts_ntp[n_ts] for n_ts in self.ts_nonprobands}
+        )
 
         ts_node_time = self.ts.get_node_attributes('time')
 
@@ -427,26 +421,16 @@ class PoincareAligner(MatchingAligner):
             else:
                 closest_unmapped = unmapped_ts
 
-            ped_sim = {n: set(sorted(self.ped_probands,
-                                     key=lambda k: ped_model.kv.similarity(k, n),
-                                     reverse=True)[:self.k])
-                       for n in self.ped_nonprobands}
-            ts_sim = {n: sorted(self.ts_probands,
-                                key=lambda k: ts_model.kv.similarity(k, n),
-                                reverse=True)[:self.k]
-                      for n in closest_unmapped}
-
-            ts_sim = {k: set([self.ts_proband_to_ped_proband[i] for i in v])
-                      for k, v in ts_sim.items()}
-
-            mapped_ts.update(
-                self.match(
-                    ped_sim, ts_sim
-                )
+            dicts = (
+                {n_ped: ped_ntp[n_ped] for n_ped in self.ped_nonprobands},
+                {n_ts: ts_ntp[n_ts] for n_ts in closest_unmapped}
             )
+
+            mapped_ts.update(self.match(*dicts))
+            mapped_ts = self.harmonize(mapped_ts, scoring_dict)
 
             unmapped_ts = [n for n in self.ts.nodes if n not in mapped_ts.keys()]
 
-        self.pred_ts_node_to_ped_node = self.harmonize(mapped_ts)
+        self.pred_ts_node_to_ped_node = mapped_ts
 
         return self.pred_ts_node_to_ped_node

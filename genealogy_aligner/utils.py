@@ -86,7 +86,7 @@ def integer_dict(values, start=1):
     return dict(zip(range(start, n + start), values))
 
 
-def soft_ordering(total_edge_index, sim_scores):
+def soft_ordering(total_edge_index, sim_scores, return_confidence=False):
 
     df = pd.DataFrame(np.concatenate((total_edge_index, sim_scores.reshape(1, -1))).T,
                       columns=['source', 'target', 'score'])
@@ -96,8 +96,13 @@ def soft_ordering(total_edge_index, sim_scores):
     target_order = {}
 
     for s in df['source'].unique():
-        sorted_targets = df.loc[df['source'] == s, 'target']
-        target_order[s] = list(sorted_targets)
+        if return_confidence:
+            sorted_targets = df.loc[df['source'] == s, ['target', 'score']]
+            sorted_targets['score'] /= sorted_targets['score'].sum()
+            target_order[s] = list(sorted_targets.to_records(index=False))
+        else:
+            sorted_targets = df.loc[df['source'] == s, 'target']
+            target_order[s] = list(sorted_targets)
 
     return target_order
 
