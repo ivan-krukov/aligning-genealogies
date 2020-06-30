@@ -248,7 +248,6 @@ class MatchingAligner ( Aligner ):
         # they must be connected in the pedigree. Otherwise,
         # their ancestors in the tree sequence are out-of-pedigree
         # nodes.
-        # I do believe this doesn't work for the diploid case
         # Case [1]:
         ped_founders = self.ped.founders ()
 
@@ -274,6 +273,11 @@ class MatchingAligner ( Aligner ):
             for ts_n2 in self.ts.siblings ( ts_n1 ):
                 if ts_n2 in g_matching and g_matching[ts_n2] is not None:
                     ped_n2 = g_matching[ts_n2]
+                    '''
+                    for pn1 in list(ped_n1):
+                        for pn2 in list(ped_n2):
+                            if nx.lowest_common_ancestor ( self.ped.graph, pn1, pn2 ) is None:
+                    '''
                     if nx.lowest_common_ancestor ( self.ped.graph, ped_n1, ped_n2 ) is None:
 
                         for ts_n in [ts_n1, ts_n2]:
@@ -319,13 +323,14 @@ class MatchingAligner ( Aligner ):
         # Plan of action: For an aligned pair (n_ts, n_ped),
         # make sure that their successors and predecessors preserve their time-ordering.
 
+        '''
         for ts_n, ped_n in g_matching.items ():
 
-            ts_n_time = self.ts.get_node_attributes('time', ts_n)
-            ped_n_time = self.ped.get_node_attributes('time', ped_n)
+            ts_n_time = self.ts.get_node_attributes ( 'time', ts_n )
+            ped_n_time = self.ped.get_node_attributes ( 'time', ped_n )
 
-            ts_pred_list = self.ts.predecessors(ts_n)
-            ts_succ_list = self.ts.successors(ts_n)
+            ts_pred_list = self.ts.predecessors ( ts_n )
+            ts_succ_list = self.ts.successors ( ts_n )
 
             # Preserving time ordering of predecessors: Regardless of how we infer time,
             # times of predecessor at pedigree and tree sequence, must be both larger or
@@ -337,29 +342,33 @@ class MatchingAligner ( Aligner ):
                         continue
                     else:
                         if ts_n_pred in g_matching and g_matching[ts_n_pred] is not None:
-                            ped_n_pred = g_matching[ts_n_pred]
+                            ped_n_pred = list ( g_matching[ts_n_pred] )
 
                         if ts_n_succ in g_matching and g_matching[ts_n_succ] is not None:
-                            ped_n_succ = g_matching[ts_n_succ]
+                            ped_n_succ = list ( g_matching[ts_n_succ] )
 
-                        ts_n_pred_time = self.ts.get_node_attributes('time', ts_n_pred)
-                        ped_n_pred_time = self.ped.get_node_attributes('time', ped_n_pred)
+                        ts_n_pred_time = self.ts.get_node_attributes ( 'time', ts_n_pred )
+                        ped_n_pred_time = []
+                        for i in range ( len ( ped_n_pred ) ):
+                            ped_n_pred_time[i] = self.ts.get_node_attributes ( 'time', ped_n_pred[i] )
 
                         if ((ts_n_pred_time - ts_n_time) *
-                                (ped_n_pred_time - ped_n_time) < 0):
-                            del ped_n_pred
+                                (ped_n_pred_time[i] - ped_n_time) < 0):
+                            del ped_n_pred[i]
 
-                        ts_n_succ_time = self.ts.get_node_attributes('time', ts_n_succ)
-                        ped_n_succ_time = self.ped.get_node_attributes('time', ped_n_succ)
+                        ts_n_succ_time = self.ts.get_node_attributes ( 'time', ts_n_succ )
+                        ped_n_succ_time = []
+                        for i in range ( len ( ped_n_succ ) ):
+                            ped_n_succ_time[i] = self.ts.get_node_attributes ( 'time', ped_n_succ[i] )
 
-                        if ((ts_n_time - ts_n_succ_time) *
-                                (ped_n_time - ped_n_succ_time) < 0):
-                            del ped_n_succ
+                        if ((ts_n_succ_time - ts_n_time) *
+                                (ped_n_succ_time[i] - ped_n_time) < 0):
+                            del ped_n_pred[i]
 
                         if not (((ts_n_succ_time > ts_n_time) and (ts_n_time > ts_n_pred_time))
                                 or ((ts_n_succ_time < ts_n_time) and (ts_n_time < ts_n_pred_time))):
                             del ped_n_succ, ped_n_pred
-
+        '''
         return g_matching
 
 
