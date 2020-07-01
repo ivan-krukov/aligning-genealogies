@@ -643,7 +643,8 @@ class Pedigree(Genealogical):
         
         T = Traversal()
         T.generations = self.generations
-        T.graph.add_nodes_from(self.probands(), time=0)
+        for proband in self.probands():
+            T.graph.add_node(proband, time=time[proband])
         T.ts_node_to_ped_node = {}
 
         for t in range(self.generations):

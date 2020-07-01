@@ -6,13 +6,14 @@ from collections import defaultdict
 from itertools import count
 import numpy.random as rnd
 from tqdm import tqdm
+import msprime
+import tskit
 
 from .Drawing import draw
 from .Genealogical import Genealogical
 
 
 class Traversal(Genealogical):
-
     def __init__(self, graph=None):
         super().__init__(graph)
         self.ploidy = None
@@ -23,15 +24,15 @@ class Traversal(Genealogical):
         # A kinship-like distance function
         n = G.n_individuals
         K = np.zeros((n, n), dtype=float)
-        
+
         for i in range(n):
             if i in self:
                 K[i, i] = 0.5
-                for j in range(i+1, n):
+                for j in range(i + 1, n):
                     if j in self:
                         if any(self.predecessors(j)):
                             p = next(self.predecessors(j))
-                            K[i, j] = (K[i, p]/2)
+                            K[i, j] = K[i, p] / 2
                             K[j, i] = K[i, j]
         return K
 
@@ -40,7 +41,7 @@ class Traversal(Genealogical):
         t_obj = copy.deepcopy(self)
 
         non_coalesc_nodes = t_obj.filter_nodes(
-                lambda node, data: len(t_obj.successors(node)) == 1
+            lambda node, data: len(t_obj.successors(node)) == 1
         )
 
         edges_to_skipped_nodes = {}
@@ -95,13 +96,12 @@ class Traversal(Genealogical):
         t_obj.graph.remove_nodes_from(list(nx.isolates(t_obj.graph)))
 
         # Set the time attribute for out-of-pedigree nodes to inf for now:
-        nx.set_node_attributes(t_obj.graph,
-                               {ind: np.inf for ind in t_obj.nodes if int(ind) < 0},
-                               'time')
+        nx.set_node_attributes(
+            t_obj.graph, {ind: np.inf for ind in t_obj.nodes if int(ind) < 0}, "time"
+        )
 
         t_obj.ts_node_to_ped_node = {
-            k: v for k, v in self.ts_node_to_ped_node.items()
-            if k in t_obj.nodes
+            k: v for k, v in self.ts_node_to_ped_node.items() if k in t_obj.nodes
         }
 
         t_obj.ped_node_to_ts_edge = {}
@@ -153,7 +153,7 @@ class Traversal(Genealogical):
         Warning:
             This method is unstable
         """
-        time = self.get_node_attributes('time')
+        time = self.get_node_attributes("time")
 
         # dist = self.distances()
         dist = self.distances_nx()
@@ -173,8 +173,49 @@ class Traversal(Genealogical):
         C.graph.remove_nodes_from(list(nx.isolates(C.graph)))
         return C
 
+    def to_tree_sequence(self, simplify=True):
+
+        tables = msprime.TableCollection(1)
+
+        coal_depth = self.get_node_attributes('time')
+        msprime_id = {}
+        for proband in self.probands():
+            u = tables.nodes.add_row(
+                time=coal_depth[proband], flags=msprime.NODE_IS_SAMPLE,
+            )
+            msprime_id[proband] = u
+        founders = self.founders()
+
+        visited_nodes = set()
+        for node, parent in self.iter_edges(forward=False):
+            if parent not in visited_nodes:
+                t = coal_depth[parent]
+                f = msprime.NODE_IS_SAMPLE if node in founders else 0
+                u = tables.nodes.add_row(time=t, flags=f,)
+                msprime_id[parent] = u
+                visited_nodes.add(parent)
+            else:
+                u = msprime_id[parent]
+            tables.edges.add_row(0, 1, u, msprime_id[node])
+
+        tables.sort()
+        if simplify:
+            tables.simplify()
+        # Unmark the initial generation as samples
+        flags = tables.nodes.flags
+        time = tables.nodes.time
+        flags[:] = 0
+        flags[time == 0] = msprime.NODE_IS_SAMPLE
+        # The final tables must also have at least one population which
+        # the samples are assigned to
+        tables.populations.add_row()
+        tables.nodes.set_columns(
+            flags=flags, time=time, population=np.zeros_like(tables.nodes.population)
+        )
+        return tables.tree_sequence(), msprime_id
+
     def draw(self, **kwargs):
-        if 'reverse' not in kwargs:
+        if "reverse" not in kwargs:
             return draw(self.graph, reverse=True, **kwargs)
         else:
             return draw(self.graph, **kwargs)
