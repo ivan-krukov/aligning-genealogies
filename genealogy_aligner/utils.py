@@ -4,6 +4,20 @@ import numpy as np
 import pandas as pd
 
 
+def invert_dictionary(d):
+    """
+    Takes a dictionary returns its inverse (values as keys and keys as values).
+    To account for duplicate values, it returns the keys as a list.
+    """
+
+    inv_dict = dict()
+
+    for k, v in d.items():
+        inv_dict.setdefault(v, []).append(k)
+
+    return inv_dict
+
+
 def create_attr_dictionary(items, attr_dict, default, invert=False):
     """
     A helper function that takes a list of items, a partial dictionary containing
@@ -25,16 +39,7 @@ def create_attr_dictionary(items, attr_dict, default, invert=False):
     fin_attr_dict = {k: v for k, v in fin_attr_dict.items() if k in items}
 
     if invert:
-
-        n_attr_dict = {}
-
-        for k, v in fin_attr_dict.items():
-            if v in n_attr_dict:
-                n_attr_dict[v].append(k)
-            else:
-                n_attr_dict[v] = [k]
-
-        return n_attr_dict
+        return invert_dictionary(fin_attr_dict)
     else:
         return fin_attr_dict
 
@@ -81,7 +86,7 @@ def integer_dict(values, start=1):
     return dict(zip(range(start, n + start), values))
 
 
-def soft_ordering(total_edge_index, sim_scores):
+def soft_ordering(total_edge_index, sim_scores, return_confidence=False):
 
     df = pd.DataFrame(np.concatenate((total_edge_index, sim_scores.reshape(1, -1))).T,
                       columns=['source', 'target', 'score'])
@@ -91,8 +96,13 @@ def soft_ordering(total_edge_index, sim_scores):
     target_order = {}
 
     for s in df['source'].unique():
-        sorted_targets = df.loc[df['source'] == s, 'target']
-        target_order[s] = list(sorted_targets)
+        if return_confidence:
+            sorted_targets = df.loc[df['source'] == s, ['target', 'score']]
+            sorted_targets['score'] /= sorted_targets['score'].sum()
+            target_order[s] = list(sorted_targets.to_records(index=False))
+        else:
+            sorted_targets = df.loc[df['source'] == s, 'target']
+            target_order[s] = list(sorted_targets)
 
     return target_order
 

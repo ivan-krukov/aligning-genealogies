@@ -1,6 +1,6 @@
 import networkx as nx
 from collections.abc import Iterable
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 
 from .Drawing import draw
@@ -48,41 +48,55 @@ class Genealogical(object):
     def parents(self, node):
         return list(self.graph.predecessors(node))
 
-    def predecessors(self, node, k=1, include_founders=False):
+    def predecessors(self, node, k=1, include_intermediates=False, include_founders=False):
+        """
+        Get predecessors that are up to `k` steps away from `node`. If `include_intermediates`
+        is true, this method also returns nodes that are <`k` steps away from `node`. If
+        `include_founders` is True, this method returns founders that are less than `k`
+        steps away from `node`.
+        """
 
-        nodes = [node]
-        while k > 0:
-            new_nodes = []
+        predecessors = nx.single_source_shortest_path_length(self.graph.reverse(), node,
+                                                             cutoff=k)
 
-            for n in nodes:
-                pred_list = list(self.graph.predecessors(n))
-                if len(pred_list) == 0 and include_founders:
-                    new_nodes.append(n)
-                else:
-                    new_nodes += pred_list
+        if include_intermediates:
+            return list(predecessors.keys())
+        else:
 
-            nodes = new_nodes
-            k -= 1
+            pred_list = []
 
-        return nodes
+            for nn, dist in predecessors.items():
+                if dist == k:
+                    pred_list.append(nn)
+                elif include_founders and len(self.graph.predecessors(nn)) == 0:
+                    pred_list.append(nn)
 
-    def successors(self, node, k=1, include_leaves=False):
+            return pred_list
 
-        nodes = [node]
-        while k > 0:
-            new_nodes = []
+    def successors(self, node, k=1, include_intermediates=False, include_leaves=False):
+        """
+        Get successors that are up to `k` steps away from `node`. If `include_intermediates`
+        is true, this method also returns nodes that are <`k` steps away from `node`. If
+        `include_leaves` is True, this method returns leaves that are less than `k`
+        steps away from `node`.
+        """
 
-            for n in nodes:
-                succ_list = list(self.graph.successors(n))
-                if len(succ_list) == 0 and include_leaves:
-                    new_nodes.append(n)
-                else:
-                    new_nodes += succ_list
+        successors = nx.single_source_shortest_path_length(self.graph, node,
+                                                           cutoff=k)
 
-            nodes = new_nodes
-            k -= 1
+        if include_intermediates:
+            return list(successors.keys())
+        else:
 
-        return nodes
+            succ_list = []
+
+            for nn, dist in successors.items():
+                if dist == k:
+                    succ_list.append(nn)
+                elif include_leaves and len(self.graph.successors(nn)) == 0:
+                    succ_list.append(nn)
+
+            return succ_list
 
     def filter_nodes(self, predicate):
         node_list = []
@@ -129,7 +143,6 @@ class Genealogical(object):
         """Get a list of individuals with no children"""
         return list(self.probands_view().nodes)
 
-
     def trace_edges(self, forward=True, source=None):
         """Trace edges in a breadth-first-search
         Yields a pair of `(node, neighbor)`
@@ -171,8 +184,7 @@ class Genealogical(object):
             curr_gen = next_gen
             next_gen = set()
 
-
-    def infer_depth(self, forward = True):
+    def infer_depth(self, forward=True):
         """Infer depth of each node.
 
         If ``forward=True``, founders (nodes without parents) have depth ``0``, each child: ``1 +
@@ -198,8 +210,6 @@ class Genealogical(object):
                 depth[child] = d + 1
 
         return depth
-
-
 
     def iter_edges(self, forward=True, source=None):
         """Iterate all the edges of the genealogy, yielding each edge exactly once"""
@@ -235,7 +245,47 @@ class Genealogical(object):
             if node not in visited_nodes:
                 visited_nodes.add(node)
                 yield node
-                
+
+    def get_num_paths_to_target(self, target=None, include_target=True):
+        """
+        Get the number of paths connecting all nodes in a Genealogical object
+        to the `target` nodes. If `target` is None, use the probands
+        by default.
+
+        This method is an optimized version of the `get_probands_under()` method,
+        with O(n) runtime.
+        """
+
+        if target is None:
+            target = self.probands()
+        elif not isinstance(target, Iterable) or type(target) == str:
+            target = [target]
+
+        pts = {}
+        nodes = self.infer_depth()
+
+        for n in sorted(nodes, key=nodes.get, reverse=True):
+
+            n_succ = self.successors(n)
+
+            if n in target:
+                pts[n] = {n: 1}
+            elif len(n_succ) == 0:
+                pts[n] = {}
+            else:
+
+                pts[n] = sum(
+                    (Counter(pts[suc]) for suc in n_succ),
+                    Counter()
+                )
+
+        pts = {k: dict(v) for k, v in pts.items() if len(v) > 0}
+
+        if not include_target:
+            for t in target:
+                del pts[t]
+
+        return pts
 
     def get_probands_under(self, nodes=None, climb_up_step=0):
 

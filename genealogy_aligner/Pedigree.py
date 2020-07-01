@@ -36,6 +36,20 @@ class Pedigree(Genealogical):
         self.graph.add_edge(mat_id, child_id)
         self.graph.add_edge(pat_id, child_id)
 
+    def spouse(self, node):
+        """
+        For a given `node`, find its list of spouses in the pedigree
+        """
+
+        spouses = list(set([
+            parent for child in self.successors(node)
+            for parent in self.predecessors(child) if parent != node
+        ]))
+
+        if len(spouses) == 0:
+            return [0]
+        else:
+            return spouses
 
     def kinship_lange(self, coefficient = 2, progress=True):
         """Calculate the kinship matrix using the Lange kinship algorithm
@@ -378,6 +392,7 @@ class Pedigree(Genealogical):
                 nx.set_node_attributes(t.graph,
                                        {n: ts.get_time(n) for n in t.nodes},
                                        'time')
+                t.ploidy = 2
                 traversals.append(t)
             return sim, traversals
         else:
@@ -539,7 +554,6 @@ class Pedigree(Genealogical):
             ped.graph = nx.subgraph(ped.graph, largest)
 
         return ped
-        
 
     def get_haplotypes(self, ploidy=2):
 
@@ -619,6 +633,8 @@ class Pedigree(Genealogical):
                                {h: node_time[i] for h, i in hap_to_ind.items()},
                                'time')
 
+        tr.ploidy = ploidy
+
         return tr
 
     def sample_haploid_path(self):
@@ -637,9 +653,10 @@ class Pedigree(Genealogical):
                     parent = rnd.choice(parents)
                     T.graph.add_node(parent, time=time[parent])
                     T.graph.add_edge(parent, node)
-            
-        return T
 
+        T.ploidy = 1
+
+        return T
     
     def iter_trios(self):
         sex = self.get_node_attributes('sex')
