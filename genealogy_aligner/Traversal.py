@@ -3,6 +3,9 @@ import numpy as np
 import copy
 from scipy.sparse import dok_matrix
 from collections import defaultdict
+from itertools import count
+import numpy.random as rnd
+from tqdm import tqdm
 
 from .Drawing import draw
 from .Genealogical import Genealogical
@@ -131,11 +134,11 @@ class Traversal(Genealogical):
             dict: ``distance[source][target]``"""
         return dict(nx.all_pairs_shortest_path_length(nx.to_undirected(self.graph)))
 
-    def distance_matrix(self):
+    def distance_matrix(self, progress=False):
         dim = max(self.nodes) + 1
         D = dok_matrix((dim, dim))
         gen = nx.all_pairs_shortest_path_length(nx.to_undirected(self.graph))
-        for source, table in gen:
+        for source, table in tqdm(gen, total=dim, disable=not progress):
             for target, dist in table.items():
                 D[source, target] = dist
         return D
