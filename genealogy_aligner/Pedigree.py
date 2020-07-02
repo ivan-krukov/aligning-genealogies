@@ -471,11 +471,12 @@ class Pedigree(Genealogical):
 
 
     @classmethod
-    def simulate_from_founders_with_sex(cls, n_founders, n_generations, avg_offspring=2, avg_immigrants=2):
+    def simulate_from_founders_with_sex(cls, n_founders, n_generations, avg_offspring=2,
+            avg_immigrants=2, seed=None):
         ped = cls()
         ped.generations = n_generations
         
-        rng = rnd.default_rng()
+        rng = rnd.default_rng(seed)
         current_males, current_females = [], []
         next_males, next_females = [], []
 
@@ -640,7 +641,7 @@ class Pedigree(Genealogical):
     def sample_haploid_path(self):
 
         time = self.get_node_attributes('time')
-        
+
         T = Traversal()
         T.generations = self.generations
         for proband in self.probands():

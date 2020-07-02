@@ -15,6 +15,7 @@ class DiploidGraph(Pedigree):
         self.generations = P.generations
 
         sex = P.get_node_attributes("sex")
+        time = P.get_node_attributes("time")
 
         for trio in P.iter_trios():
             father, mother, child = trio.values()
@@ -25,26 +26,32 @@ class DiploidGraph(Pedigree):
 
             self.graph.add_nodes_from(
                 [
-                    (f_pat, {"individual": father, "sex": 1}),
-                    (f_mat, {"individual": father, "sex": 1}),
-                    (c_pat, {"individual": child, "sex": sex[child]}),
+                    (f_pat, {"individual": father, "sex": 1, "time": time[father]}),
+                    (f_mat, {"individual": father, "sex": 1, "time": time[father]}),
+                    (
+                        c_pat,
+                        {"individual": child, "sex": sex[child], "time": time[child]},
+                    ),
                 ]
             )
             self.graph.add_edges_from([(f_pat, c_pat), (f_mat, c_pat)])
 
             self.graph.add_nodes_from(
                 [
-                    (m_pat, {"individual": mother, "sex": 2}),
-                    (m_mat, {"individual": mother, "sex": 2}),
-                    (c_mat, {"individual": child, "sex": sex[child]}),
+                    (m_pat, {"individual": mother, "sex": 2, "time": time[mother]}),
+                    (m_mat, {"individual": mother, "sex": 2, "time": time[mother]}),
+                    (
+                        c_mat,
+                        {"individual": child, "sex": sex[child], "time": time[child]},
+                    ),
                 ]
             )
             self.graph.add_edges_from([(m_pat, c_mat), (m_mat, c_mat)])
 
         # TODO
         # it seems that we are actually not using this? It's assigned throughout, however
-        coalescent_depth = self.infer_depth(forward=False)
-        nx.set_node_attributes(self.graph, coalescent_depth, "time")
+        # coalescent_depth = self.infer_depth(forward=False)
+        # nx.set_node_attributes(self.graph, coalescent_depth, "time")
 
     def draw(self, ax=None, nudge=30, figsize=(8, 6), node_size=800):
 
@@ -54,7 +61,9 @@ class DiploidGraph(Pedigree):
         sex = nx.get_node_attributes(self.graph, "sex")
         pos = get_graphviz_layout(self.graph)
         pos_left_nudge = {node: (x - nudge, y) for node, (x, y) in pos.items()}
+        pos_right_nudge = {node: (x + nudge, y) for node, (x, y) in pos.items()}
         individuals = nx.get_node_attributes(self.graph, "individual")
+        times = nx.get_node_attributes(self.graph, "time")
 
         males = [node for node, ind in individuals.items() if sex[node] == 1]
         nx.draw_networkx_nodes(
@@ -98,8 +107,17 @@ class DiploidGraph(Pedigree):
         nx.draw_networkx_labels(
             self.graph, pos_left_nudge, ax=ax, font_color="firebrick", font_size=12
         )
+        nx.draw_networkx_labels(
+            self.graph,
+            pos_right_nudge,
+            ax=ax,
+            font_color="forestgreen",
+            font_size=12,
+            labels=times,
+        )
 
-        subscript_patch = mpatches.Patch(color="firebrick", label="Ploid ID")
-        ax.legend(handles=[subscript_patch], loc="lower right")
+        left_patch = mpatches.Patch(color="firebrick", label="Ploid ID")
+        right_patch = mpatches.Patch(color="forestgreen", label="Generation")
+        ax.legend(handles=[left_patch, right_patch], loc="lower right")
 
         return ax
