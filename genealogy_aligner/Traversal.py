@@ -177,7 +177,7 @@ class Traversal(Genealogical):
 
         tables = msprime.TableCollection(1)
 
-        coal_depth = self.get_node_attributes('time')
+        coal_depth = self.get_node_attributes("time")
         msprime_id = {}
         for proband in self.probands():
             u = tables.nodes.add_row(
@@ -200,7 +200,11 @@ class Traversal(Genealogical):
 
         tables.sort()
         if simplify:
-            tables.simplify()
+            mapping = tables.simplify()
+            simplified_msprime_id = {}
+            for i, node in enumerate(msprime_id.keys()):
+                simplified_msprime_id[node] = mapping[i]
+                msprime_id = simplified_msprime_id
         # Unmark the initial generation as samples
         flags = tables.nodes.flags
         time = tables.nodes.time
