@@ -4,16 +4,19 @@ import numpy as np
 import pandas as pd
 
 
-def invert_dictionary(d):
+def invert_dictionary(d, one_to_one=False):
     """
     Takes a dictionary returns its inverse (values as keys and keys as values).
-    To account for duplicate values, it returns the keys as a list.
+    To account for duplicate values, it returns the keys as a list, unless `one_to_one` is True
     """
 
-    inv_dict = dict()
+    inv_dict = {}
 
-    for k, v in d.items():
-        inv_dict.setdefault(v, []).append(k)
+    if one_to_one:
+        return {v: k for k, v in d.items()}
+    else:
+        for k, v in d.items():
+            inv_dict.setdefault(v, []).append(k)
 
     return inv_dict
 
@@ -44,8 +47,7 @@ def create_attr_dictionary(items, attr_dict, default, invert=False):
         return fin_attr_dict
 
 
-def get_k_order_neighbors(graph, source_nodes,
-                          radius=1, undirected=True):
+def get_k_order_neighbors(graph, source_nodes, radius=1, undirected=True):
     """
     This function takes a graph, a source node, and a radius,
     and returns a dictionary of all nodes in the graph that are
@@ -68,8 +70,9 @@ def get_k_order_neighbors(graph, source_nodes,
     node_subset = {}
 
     for n in source_nodes:
-        for nn, dist in nx.single_source_shortest_path_length(graph, n,
-                                                              cutoff=radius).items():
+        for nn, dist in nx.single_source_shortest_path_length(
+            graph, n, cutoff=radius
+        ).items():
             if nn in node_subset:
                 node_subset[nn] = min(node_subset[nn], dist)
             else:
@@ -88,20 +91,22 @@ def integer_dict(values, start=1):
 
 def soft_ordering(total_edge_index, sim_scores, return_confidence=False):
 
-    df = pd.DataFrame(np.concatenate((total_edge_index, sim_scores.reshape(1, -1))).T,
-                      columns=['source', 'target', 'score'])
+    df = pd.DataFrame(
+        np.concatenate((total_edge_index, sim_scores.reshape(1, -1))).T,
+        columns=["source", "target", "score"],
+    )
 
-    df = df.sort_values(by=['source', 'score'], ascending=False)
+    df = df.sort_values(by=["source", "score"], ascending=False)
 
     target_order = {}
 
-    for s in df['source'].unique():
+    for s in df["source"].unique():
         if return_confidence:
-            sorted_targets = df.loc[df['source'] == s, ['target', 'score']]
-            sorted_targets['score'] /= sorted_targets['score'].sum()
+            sorted_targets = df.loc[df["source"] == s, ["target", "score"]]
+            sorted_targets["score"] /= sorted_targets["score"].sum()
             target_order[s] = list(sorted_targets.to_records(index=False))
         else:
-            sorted_targets = df.loc[df['source'] == s, 'target']
+            sorted_targets = df.loc[df["source"] == s, "target"]
             target_order[s] = list(sorted_targets)
 
     return target_order
