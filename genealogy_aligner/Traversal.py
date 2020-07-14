@@ -173,6 +173,38 @@ class Traversal(Genealogical):
         C.graph.remove_nodes_from(list(nx.isolates(C.graph)))
         return C
 
+    @classmethod
+    def from_tree_sequence(cls, ts, labels=None):
+        """WARNING: only works for single-tree TS!"""
+        # use provided label mapping and add extra labels for out-of-tree
+        def labels_for_tree(nodes_table, labels):
+            oot_counter = count(-1, -1)  # count backward
+            assigned_labels = {}
+            for i in range(len(nodes_table)):
+                assigned_labels[i] = (
+                    int(labels[i]) if i in labels else next(oot_counter)
+                )
+            return assigned_labels
+
+        tables = ts.dump_tables()
+
+        if labels is not None:
+            labels = labels_for_tree(tables.nodes, labels)
+        else:
+            # UGLY!
+            labels = {i: i for i in range(len(tables.nodes))}
+
+        T = Traversal()
+        for node, time in enumerate(tables.nodes.time):
+            T.graph.add_node(labels[node], time=time)
+
+        for child, parent in zip(tables.edges.child, tables.edges.parent):
+            T.graph.add_edge(labels[parent], labels[child])
+
+        T.generations = np.max(tables.nodes.time)
+        T.ploidy = 1  # ???
+        return T
+
     def to_tree_sequence(self, simplify=True):
 
         tables = msprime.TableCollection(1)
