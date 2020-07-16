@@ -14,9 +14,12 @@ from .Genealogical import Genealogical
 
 
 class Traversal(Genealogical):
+
     def __init__(self, graph=None):
+
         super().__init__(graph)
-        self.ploidy = None
+
+        self.haploid_probands = False
         self.ts_node_to_ped_node = None
         self.ped_node_to_ts_edge = None
 

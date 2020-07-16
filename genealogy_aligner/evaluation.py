@@ -37,7 +37,7 @@ def simple_symmetries(ped, true_ts_to_ped, pred_ts_to_ped):
             count_mistakes += 1
 
             if pred_ped_n is not None and true_ped_n is not None:
-                if true_ped_n in ped.spouse(pred_ped_n):
+                if true_ped_n in ped.pairs(pred_ped_n):
                     count_symmetries += 1
 
     return float(count_symmetries) / count_mistakes

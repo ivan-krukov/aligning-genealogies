@@ -11,8 +11,8 @@ from numpy import random as rnd
 
 from .Genealogical import Genealogical
 from .Traversal import Traversal
-from .Haplotype import Haplotype
 from .Drawing import draw
+from .HaplotypeGraph import HaplotypeGraph
 from .utils import integer_dict
 
 
@@ -22,7 +22,6 @@ class Pedigree(Genealogical):
     def __init__(self, graph=None):
         
         super().__init__(graph)
-        self.haplotypes = None
     
     def add_couple(self, mat_id, pat_id, time):
         self.graph.add_node(mat_id, time=time)
@@ -113,7 +112,6 @@ class Pedigree(Genealogical):
         sex = np.zeros_like(ind_id)
         sex[male] = 1
         sex[female] = 2
-        # TODO: should this be `0`?
         sex[unknown] = -1
         return sex
 
@@ -392,7 +390,6 @@ class Pedigree(Genealogical):
                 nx.set_node_attributes(t.graph,
                                        {n: ts.get_time(n) for n in t.nodes},
                                        'time')
-                t.ploidy = 2
                 traversals.append(t)
             return sim, traversals
         else:
@@ -468,7 +465,6 @@ class Pedigree(Genealogical):
             ped.graph = nx.subgraph(ped.graph, largest)
 
         return ped
-
 
     @classmethod
     def simulate_from_founders_with_sex(cls, n_founders, n_generations, avg_offspring=2,
@@ -556,110 +552,9 @@ class Pedigree(Genealogical):
 
         return ped
 
-    def get_haplotypes(self, ploidy=2):
+    def get_haplotype_graph(self, graph_type="autosomal"):
+        return HaplotypeGraph(self, graph_type)
 
-        assert ploidy in (1, 2)
-
-        self.haplotypes = {}
-
-        for i, n in enumerate(self.nodes, 1):
-            if ploidy == 2:
-                self.haplotypes[n] = [
-                    Haplotype(2 * i - 1, n),
-                    Haplotype(2 * i, n)
-                ]
-            else:
-                self.haplotypes[n] = [
-                    Haplotype(i, n)
-                ]
-
-        return self.haplotypes
-
-    def sample_path(self, probands=None, ploidy=1):
-        """Sample a coalescent path from a genealogy
-
-        Starting at the probands (t=0), randomly choose a parent.
-        Stop once founder individuals (t=max) are reached
-
-        Returns:
-            A `Traversal` object
-        """
-
-        if probands is None:
-            probands = self.probands()
-
-        tr = Traversal()
-        tr.generations = self.generations
-
-        # Obtain the haplotype data structure:
-        hap_struct = self.get_haplotypes(ploidy)
-        hap_to_ind = {}
-
-        # For all the nodes in the pedigree:
-        for i, n in enumerate(self.nodes, 1):
-
-            # For all the haplotypes assigned to each node,
-            # randomly pair them with the parents (without
-            # replacement).
-            for hap_obj, parent in zip(
-                    hap_struct[n],
-                    rnd.choice(self.get_parents(n), 2, replace=False)):
-
-                # If the parent is a node in the pedigree:
-                if parent != 0:
-                    # If the given haplotype hasn't been linked to a haplotype
-                    # the parent, assign randomly from the parent's 2 copies:
-                    if hap_obj.parent_haplotype is None:
-                        hap_obj.parent_haplotype = rnd.choice(hap_struct[parent])
-
-                    tr.graph.add_edge(hap_obj.parent_haplotype.id, hap_obj.id)
-
-                hap_to_ind[hap_obj.id] = hap_obj.individual_id
-
-        # Trim paths that end at non-proband haplotypes:
-        non_proband_terminals = [n for n in tr.probands()
-                                 if hap_to_ind[n] not in probands]
-        while len(non_proband_terminals) > 0:
-            tr.graph.remove_nodes_from(non_proband_terminals)
-            non_proband_terminals = [n for n in tr.probands()
-                                     if hap_to_ind[n] not in probands]
-
-        # Assign the 'haplotype to individual' dictionary to the traversal object:
-        hap_to_ind = {k: v for k, v in hap_to_ind.items() if k in tr.nodes}
-        tr.ts_node_to_ped_node = hap_to_ind
-
-        # Set time attribute information:
-        node_time = self.get_node_attributes('time')
-        nx.set_node_attributes(tr.graph,
-                               {h: node_time[i] for h, i in hap_to_ind.items()},
-                               'time')
-
-        tr.ploidy = ploidy
-
-        return tr
-
-    def sample_haploid_path(self):
-
-        time = self.get_node_attributes('time')
-
-        T = Traversal()
-        T.generations = self.generations
-        for proband in self.probands():
-            T.graph.add_node(proband, time=time[proband])
-        T.ts_node_to_ped_node = {}
-
-        for t in range(self.generations):
-            for node in T.nodes_at_generation(t):
-                parents = list(self.graph.predecessors(node))
-                if parents:
-                    parent = rnd.choice(parents)
-                    T.graph.add_node(parent, time=time[parent])
-                    T.graph.add_edge(parent, node)
-
-        T.ploidy = 1
-
-        return T
-    
     def iter_trios(self):
         sex = self.get_node_attributes('sex')
         for node in self.iter_nodes():
