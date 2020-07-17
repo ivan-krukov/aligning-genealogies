@@ -135,16 +135,20 @@ class Traversal(Genealogical):
             dict: ``distance[source][target]``"""
         return dict(nx.all_pairs_shortest_path_length(nx.to_undirected(self.graph)))
 
-    def distance_matrix(self, progress=False):
+    # TODO: remove the `kinship_like a`rgument
+    def distance_matrix(self, progress=False, kinship_like=False, kinship_coeff=2.0):
         dim = max(self.nodes) + 1
         D = dok_matrix((dim, dim))
-        gen = nx.all_pairs_shortest_path_length(nx.to_undirected(self.graph))
+        # TODO: Is this the best way to get tree lengths?
+        gen = nx.all_pairs_dijkstra_path_length(nx.to_undirected(self.graph))
         for source, table in tqdm(gen, total=dim, disable=not progress):
             for target, dist in table.items():
+                if kinship_like:
+                    dist = kinship_coeff ** (-dist)
                 D[source, target] = dist
         return D
 
-    def parent_of(self, node):
+    def first_parent_of(self, node):
         parents = list(self.graph.predecessors(node))
         return parents[0] if parents else None
 
@@ -178,9 +182,10 @@ class Traversal(Genealogical):
         """WARNING: only works for single-tree TS!"""
         # use provided label mapping and add extra labels for out-of-tree
         def labels_for_tree(nodes_table, labels):
-            oot_counter = count(-1, -1)  # count backward
+            L = len(nodes_table)
+            oot_counter = count(max(labels.values()) + 1)
             assigned_labels = {}
-            for i in range(len(nodes_table)):
+            for i in range(L):
                 assigned_labels[i] = (
                     int(labels[i]) if i in labels else next(oot_counter)
                 )
@@ -195,13 +200,16 @@ class Traversal(Genealogical):
             labels = {i: i for i in range(len(tables.nodes))}
 
         T = Traversal()
-        for node, time in enumerate(tables.nodes.time):
-            T.graph.add_node(labels[node], time=time)
+        time = tables.nodes.time
+        for node, t in enumerate(time):
+            T.graph.add_node(labels[node], time=t)
 
         for child, parent in zip(tables.edges.child, tables.edges.parent):
-            T.graph.add_edge(labels[parent], labels[child])
+            T.graph.add_edge(
+                labels[parent], labels[child], weight=time[parent] - time[child]
+            )
 
-        T.generations = np.max(tables.nodes.time)
+        T.generations = np.max(time)
         T.ploidy = 1  # ???
         return T
 
@@ -237,16 +245,11 @@ class Traversal(Genealogical):
             for i, node in enumerate(msprime_id.keys()):
                 simplified_msprime_id[node] = mapping[i]
                 msprime_id = simplified_msprime_id
-        # Unmark the initial generation as samples
-        flags = tables.nodes.flags
-        time = tables.nodes.time
-        flags[:] = 0
-        flags[time == 0] = msprime.NODE_IS_SAMPLE
-        # The final tables must also have at least one population which
-        # the samples are assigned to
         tables.populations.add_row()
         tables.nodes.set_columns(
-            flags=flags, time=time, population=np.zeros_like(tables.nodes.population)
+            flags=tables.nodes.flags,
+            time=tables.nodes.time,
+            population=np.zeros_like(tables.nodes.population),
         )
         return tables.tree_sequence(), msprime_id
 

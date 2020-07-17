@@ -657,8 +657,9 @@ class Pedigree(Genealogical):
 
         return tr
 
-    def sample_haploid_path(self):
+    def sample_haploid_path(self, seed):
 
+        rng = rnd.default_rng(seed)
         time = self.get_node_attributes("time")
 
         T = Traversal()
@@ -671,7 +672,7 @@ class Pedigree(Genealogical):
             for node in T.nodes_at_generation(t):
                 parents = list(self.graph.predecessors(node))
                 if parents:
-                    parent = rnd.choice(parents)
+                    parent = rng.choice(parents)
                     T.graph.add_node(parent, time=time[parent])
                     T.graph.add_edge(parent, node)
 
