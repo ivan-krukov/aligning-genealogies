@@ -33,8 +33,8 @@ def infer_ts(filename):
         Args: filename'''
     sample_data = read_samples(filename)
     inferred_ts = tsinfer.infer (sample_data)
-    #for tree in inferred_ts.trees ():
-        #print ( tree.draw ( format="unicode" ) )
+    for tree in inferred_ts.trees ():
+        print ( tree.draw ( format="unicode" ) )
     return inferred_ts
 
 
@@ -54,32 +54,14 @@ def convert_to_traversal(inferred_ts):
     return traversals
 
 
-def infer_from_msprime(ss=20, Ne=1e4, length=5e3, rho=2e-8,mu=2e-8, rs=10):
+def infer_from_msprime(simulation):
     ''' Given msprime simulation results, obtains the corresponding inferred
         tree sequence using tsinfer
-        Args: sample_size (int): The number of sampled monoploid genomes.
-              Ne (int): effective population size to use after the pedigree simulation is complete
-              length (float): length of the genomic segment to simulate
-              rho (float): recombination rate
-              mu (float): mutation rate
-              rs(int): random seed. If this is None, a random seed will be automatically generated.
+        Args: result - msprime output
     '''
 
-
-    result = msp.simulate(sample_size = ss, Ne = Ne, length = length, recombination_rate=rho,
-                          mutation_rate=mu, random_seed=rs)
-    #print ( "Simulation done:", result.num_trees, "trees and", result.num_sites, "sites" )
-
-    with tsinfer.SampleData (sequence_length=result.sequence_length, num_flush_threads=2) as sample_data:
-        for var in result.variants ():
+    with tsinfer.SampleData (sequence_length=simulation.sequence_length, num_flush_threads=2) as sample_data:
+        for var in simulation.variants ():
             sample_data.add_site ( var.site.position, var.genotypes, var.alleles )
     inferred_ts = tsinfer.infer (sample_data)
     return inferred_ts
-
-#Running the script manually
-'''if __name__ == "__main__":
-    name = "sample1"
-    inferred = infer_ts(name)
-    print(convert_to_traversal(inferred))
-    print(infer_from_msprime(20,1e4))
-'''
