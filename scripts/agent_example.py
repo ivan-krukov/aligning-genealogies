@@ -1,7 +1,7 @@
 import networkx as nx
 from genealogy_aligner import *
 import numpy as np
-from collections import Counter, namedtuple
+from collections import Counter
 import numpy.random as rnd
 import matplotlib.pyplot as plt
 from copy import deepcopy
@@ -49,8 +49,8 @@ seed = 920
 rnd.seed(seed)
 print(f"Seed {seed}")
 founders = 50
-generations = 10
-immigrants = 20
+generations = 5
+immigrants = 10
 progress = True
 
 P = Pedigree.simulate_from_founders_with_sex(
@@ -106,12 +106,12 @@ for ped_node, ped_parents in climber:
     up_stat = Q[gen_parent, probands].todense()
 
     # calc with dot-products
-    # left = up_stat @ left_stat
-    # right = up_stat @ right_stat
+    left = up_stat @ left_stat
+    right = up_stat @ right_stat
 
     # calc with alt similarity
-    left = tanimoto(up_stat, left_stat)
-    right = tanimoto(up_stat, right_stat)
+    # left = tanimoto(up_stat, left_stat)
+    # right = tanimoto(up_stat, right_stat)
 
     if left > right:
         choice = ped_parents[0]

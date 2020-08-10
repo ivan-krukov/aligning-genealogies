@@ -5,7 +5,6 @@ from .Genealogical import Genealogical
 
 
 class Climber:
-
     def __init__(self, gen, source):
         self.gen = gen
         self.depth = gen.infer_depth(forward=False)
@@ -22,3 +21,8 @@ class Climber:
             for node in self.depth_map[t]:
                 parents = list(self.gen.graph.predecessors(node))
                 yield node, parents
+
+    def step_up(self, t):
+        for node in self.depth_map[t]:
+            parents = list(self.gen.graph.predecessors(node))
+            yield node, parents

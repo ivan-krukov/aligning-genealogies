@@ -342,12 +342,13 @@ class Pedigree(Genealogical):
 
     def generate_msprime_simulations(
         self,
-        Ne=100,
-        model_after="dtwf",
-        mu=1e-8,
-        length=1e6,
-        rho=1e-8,
+        Ne=1000,
+        model_after="hudson",
+        mu=None,
+        length=None,
+        rho=None,
         convert_to_traversal=True,
+        random_seed=None,
     ):
 
         """Simulate with ``msprime`` upon a genealogy
@@ -365,8 +366,6 @@ class Pedigree(Genealogical):
 
             """
 
-        rm = msp.RecombinationMap([0, int(length)], [rho, 0], discrete=True)
-
         if model_after:
             des = [msp.SimulationModelChange(self.generations, model_after)]
         else:
@@ -377,9 +376,11 @@ class Pedigree(Genealogical):
             Ne=Ne,
             pedigree=self.to_msprime_pedigree(),
             model="wf_ped",
+            length=length,
             mutation_rate=mu,
-            recombination_map=rm,
+            recombination_rate=rho,
             demographic_events=des,
+            random_seed=random_seed,
         )
 
         ts_nodes_to_ped_map = {}
