@@ -45,10 +45,10 @@ def cosine(a, b):
 
 
 seed = rnd.randint(1000)
-seed = 920
+#seed = 241
 rnd.seed(seed)
 print(f"Seed {seed}")
-founders = 50
+founders = 10
 generations = 5
 immigrants = 10
 progress = True
@@ -72,7 +72,6 @@ Q = O.distance_matrix(kinship_like=True, progress=progress) / 2
 
 K, idx = D.kinship_lange(progress=progress)
 
-prob_idx = [idx[p] for p in probands]
 
 
 correct = Counter()
@@ -85,11 +84,13 @@ for p in probands:
     ancestors = ancestor_chain(O, p)
     agent = Agent(ancestors)
     agents[p] = agent
-
+agent_nodes = probands
 choices = {}
 symmetries = Counter()
 climber = Climber(D, source=probands)
 for ped_node, ped_parents in climber:
+    agent_idx = [idx[p] for p in agent_nodes]
+
     if not ped_parents:
         continue
 
@@ -101,9 +102,9 @@ for ped_node, ped_parents in climber:
 
     d = depth[ped_node] + 1
 
-    left_stat = K[idx[ped_parents[0]], prob_idx]
-    right_stat = K[idx[ped_parents[1]], prob_idx]
-    up_stat = Q[gen_parent, probands].todense()
+    left_stat = K[idx[ped_parents[0]], agent_idx]
+    right_stat = K[idx[ped_parents[1]], agent_idx]
+    up_stat = Q[gen_parent, agent_nodes].todense()
 
     # calc with dot-products
     left = up_stat @ left_stat
@@ -122,6 +123,8 @@ for ped_node, ped_parents in climber:
         choice = ped_parents[rch]
         symmetries[d] += 1
     choices[ped_node] = choice
+    agent_nodes.remove(ped_node)
+    agent_nodes.append(choice)
 
     climber.queue(choice)
 
