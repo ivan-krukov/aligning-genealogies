@@ -1,5 +1,5 @@
 import networkx as nx
-from genealogy_aligner import *
+from genealogy_aligner import Pedigree, DiploidGraph, Traversal, Climber
 import numpy as np
 from collections import Counter
 import numpy.random as rnd
@@ -30,27 +30,13 @@ class Agent:
         return f"Agent({self.ref_count}, {self.ancestor_chain})"
 
 
-def tanimoto(a, b):
-    dot = a @ b
-    an = la.norm(a)
-    bn = la.norm(b)
-    return dot / (an ** 2 + bn ** 2 - dot)
-
-
-def cosine(a, b):
-    dot = a @ b
-    an = la.norm(a)
-    bn = la.norm(b)
-    return dot / (an * bn)
-
-
 seed = rnd.randint(1000)
-#seed = 241
+seed = 1
 rnd.seed(seed)
 print(f"Seed {seed}")
-founders = 10
-generations = 5
-immigrants = 10
+founders = 4
+generations = 3
+immigrants = 4
 progress = True
 
 P = Pedigree.simulate_from_founders_with_sex(
@@ -72,8 +58,6 @@ Q = O.distance_matrix(kinship_like=True, progress=progress) / 2
 
 K, idx = D.kinship_lange(progress=progress)
 
-
-
 correct = Counter()
 incorrect = Counter()
 symmetries = Counter()
@@ -88,51 +72,71 @@ agent_nodes = probands
 choices = {}
 symmetries = Counter()
 climber = Climber(D, source=probands)
-for ped_node, ped_parents in climber:
-    agent_idx = [idx[p] for p in agent_nodes]
 
-    if not ped_parents:
-        continue
+keep_climbing = True
+while keep_climbing:
+    agent_options = []
+    for ped_node, ped_parents in climber:
+        agent_idx = [idx[p] for p in agent_nodes]
 
-    agent = agents[ped_node]
-    if agent.ref_count > 1:
-        agent.ancestor_chain.pop(0)
+        if not ped_parents:
+            continue
 
-    gen_parent = agent.ancestor_chain[0]
+        agent = agents[ped_node]
+        if agent.ref_count > 1:
+            agent.ancestor_chain.pop(0)
 
-    d = depth[ped_node] + 1
+        gen_parent = agent.ancestor_chain[0]
 
-    left_stat = K[idx[ped_parents[0]], agent_idx]
-    right_stat = K[idx[ped_parents[1]], agent_idx]
-    up_stat = Q[gen_parent, agent_nodes].todense()
+        d = depth[ped_node] + 1
 
-    # calc with dot-products
-    left = up_stat @ left_stat
-    right = up_stat @ right_stat
+        left_stat = K[idx[ped_parents[0]], agent_idx]
+        right_stat = K[idx[ped_parents[1]], agent_idx]
+        up_stat = Q[gen_parent, agent_nodes].todense()
 
-    # calc with alt similarity
-    # left = tanimoto(up_stat, left_stat)
-    # right = tanimoto(up_stat, right_stat)
+        # calc with dot-products
+        left = up_stat @ left_stat
+        right = up_stat @ right_stat
 
-    if left > right:
-        choice = ped_parents[0]
-    elif left < right:
-        choice = ped_parents[1]
-    else:
-        rch = rnd.choice(2)
-        choice = ped_parents[rch]
-        symmetries[d] += 1
-    choices[ped_node] = choice
-    agent_nodes.remove(ped_node)
-    agent_nodes.append(choice)
+        if left > right:
+            choice = ped_parents[0]
+            score = left
+        elif left < right:
+            choice = ped_parents[1]
+            score = right
+        else:
+            rch = rnd.choice(2)
+            choice = ped_parents[rch]
+            symmetries[d] += 1
+            score = left = right
 
-    climber.queue(choice)
+        agent_options.append((float(score), choice, ped_node))
 
-    if choice in agents:
-        agents[choice].ref_count += 1
+    # take a pause and look around
+    best_score, best_choice, best_node = sorted(agent_options, reverse=True)[0]
+    print(best_score, best_choice, best_node)
+    
+    D.graph.remove_node(best_node)
+    K, idx = D.kinship_lange(progress=progress)
+
+    rest_nodes = [opt[2] for opt in agent_options]
+    rest_nodes.remove(best_node)
+
+    if not rest_nodes:
+        keep_climbing = False
+
+    choices[best_node] = best_choice
+    agent_nodes.remove(best_node)
+    agent_nodes.append(best_choice)
+
+    if best_choice in agents:
+        agents[best_choice].ref_count += 1
     else:
         a = Agent(agent.ancestor_chain)
-        agents[choice] = a
+        agents[best_choice] = a
+
+    climber = Climber(D, source=rest_nodes)
+    
 
 correct_ind = Counter()
 correct_ploid = Counter()

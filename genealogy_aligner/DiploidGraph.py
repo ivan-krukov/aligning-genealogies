@@ -53,7 +53,7 @@ class DiploidGraph(Pedigree):
         # coalescent_depth = self.infer_depth(forward=False)
         # nx.set_node_attributes(self.graph, coalescent_depth, "time")
 
-    def draw(self, ax=None, nudge=30, figsize=(8, 6), node_size=800, show_gen=False):
+    def draw(self, ax=None, nudge=30, figsize=(14, 6), node_size=300, show_gen=False):
 
         if ax is None:
             _, ax = plt.subplots(figsize=figsize)
