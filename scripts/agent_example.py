@@ -34,9 +34,17 @@ seed = rnd.randint(1000)
 seed = 1
 rnd.seed(seed)
 print(f"Seed {seed}")
+# hand-held example
 founders = 4
 generations = 3
 immigrants = 4
+
+# larger example:
+# founders = 10
+# generations = 5
+# immigrants = 10
+
+
 progress = True
 
 P = Pedigree.simulate_from_founders_with_sex(
@@ -74,6 +82,7 @@ symmetries = Counter()
 climber = Climber(D, source=probands)
 
 keep_climbing = True
+parent_nodes = []
 while keep_climbing:
     agent_options = []
     for ped_node, ped_parents in climber:
@@ -114,6 +123,7 @@ while keep_climbing:
 
     # take a pause and look around
     best_score, best_choice, best_node = sorted(agent_options, reverse=True)[0]
+    parent_nodes.append(best_choice)
     print(best_score, best_choice, best_node)
     
     D.graph.remove_node(best_node)
@@ -121,9 +131,6 @@ while keep_climbing:
 
     rest_nodes = [opt[2] for opt in agent_options]
     rest_nodes.remove(best_node)
-
-    if not rest_nodes:
-        keep_climbing = False
 
     choices[best_node] = best_choice
     agent_nodes.remove(best_node)
@@ -135,7 +142,13 @@ while keep_climbing:
         a = Agent(agent.ancestor_chain)
         agents[best_choice] = a
 
-    climber = Climber(D, source=rest_nodes)
+    if not parent_nodes:
+        keep_climbing = False
+    elif rest_nodes:
+        climber = Climber(D, source=rest_nodes)
+    else:
+        climber = Climber(D, source=parent_nodes)
+        parent_nodes = []
     
 
 correct_ind = Counter()

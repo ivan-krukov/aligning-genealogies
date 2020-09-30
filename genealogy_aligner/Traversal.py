@@ -1,7 +1,6 @@
 import networkx as nx
 import numpy as np
 import copy
-from scipy.sparse import dok_matrix
 from collections import defaultdict
 from itertools import count
 import numpy.random as rnd
@@ -134,19 +133,6 @@ class Traversal(Genealogical):
         Returns:
             dict: ``distance[source][target]``"""
         return dict(nx.all_pairs_shortest_path_length(nx.to_undirected(self.graph)))
-
-    # TODO: remove the `kinship_like a`rgument
-    def distance_matrix(self, progress=False, kinship_like=False, kinship_coeff=2.0):
-        dim = max(self.nodes) + 1
-        D = dok_matrix((dim, dim))
-        # TODO: Is this the best way to get tree lengths?
-        gen = nx.all_pairs_dijkstra_path_length(nx.to_undirected(self.graph))
-        for source, table in tqdm(gen, total=dim, disable=not progress):
-            for target, dist in table.items():
-                if kinship_like:
-                    dist = kinship_coeff ** (-dist)
-                D[source, target] = dist
-        return D
 
     def first_parent_of(self, node):
         parents = list(self.graph.predecessors(node))

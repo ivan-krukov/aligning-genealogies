@@ -1,7 +1,8 @@
 import networkx as nx
 from collections.abc import Iterable
 from collections import defaultdict, Counter
-
+from scipy.sparse import dok_matrix
+from tqdm import tqdm
 
 from .Drawing import draw
 import numpy as np
@@ -337,3 +338,19 @@ class Genealogical(object):
                     K[i,j] = (K[i,p]/2)
                     K[j,i] = K[i,j]
         return K
+
+
+    # TODO: remove the `kinship_like a`rgument
+    def distance_matrix(self, progress=False, kinship_like=False, kinship_coeff=2.0):
+        dim = max(self.nodes) + 1
+        D = dok_matrix((dim, dim))
+        # TODO: Is this the best way to get tree lengths?
+        gen = nx.all_pairs_dijkstra_path_length(nx.to_undirected(self.graph))
+        for source, table in tqdm(gen, total=dim, disable=not progress):
+            for target, dist in table.items():
+                if kinship_like:
+                    dist = kinship_coeff ** (-dist)
+                D[source, target] = dist
+        return D
+
+    
