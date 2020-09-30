@@ -53,7 +53,7 @@ class DiploidGraph(Pedigree):
         # coalescent_depth = self.infer_depth(forward=False)
         # nx.set_node_attributes(self.graph, coalescent_depth, "time")
 
-    def draw(self, ax=None, nudge=30, figsize=(14, 6), node_size=300, show_gen=False):
+    def draw(self, ax=None, nudge=30, figsize=(14, 6), node_size=300, show_gen=False, show_ind=False):
 
         if ax is None:
             _, ax = plt.subplots(figsize=figsize)
@@ -91,14 +91,18 @@ class DiploidGraph(Pedigree):
             ax=ax,
             font_size=12,
             font_color="white",
-            labels=individuals,
+            # labels=individuals,
         )
         nx.draw_networkx_edges(self.graph, pos=pos, ax=ax, node_size=node_size)
-        nx.draw_networkx_labels(
-            self.graph, pos_left_nudge, ax=ax, font_color="firebrick", font_size=12
-        )
-        left_patch = mpatches.Patch(color="firebrick", label="Ploid ID")
-        legend_handles = [left_patch]
+
+        legend_handles = []
+        if show_ind:
+            nx.draw_networkx_labels(
+                self.graph, pos_left_nudge, ax=ax, font_color="firebrick", font_size=12,
+                labels = individuals
+            )
+            left_patch = mpatches.Patch(color="firebrick", label="Individual ID")
+            legend_handles = [left_patch]
 
         if show_gen:
             nx.draw_networkx_labels(

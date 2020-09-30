@@ -658,14 +658,16 @@ class Pedigree(Genealogical):
 
         return tr
 
-    def sample_haploid_path(self, seed):
+    def sample_haploid_path(self, seed, probands=None):
 
         rng = rnd.default_rng(seed)
         time = self.get_node_attributes("time")
 
         T = Traversal()
         T.generations = self.generations
-        for proband in self.probands():
+        if probands is None:
+            probands = self.probands()
+        for proband in probands:
             T.graph.add_node(proband, time=time[proband])
         T.ts_node_to_ped_node = {}
 

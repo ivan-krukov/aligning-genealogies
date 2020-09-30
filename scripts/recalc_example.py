@@ -29,26 +29,35 @@ assert (probands == G.probands())
 # TODO this is not giving the correct kinship for siblings
 tD = T.distance_matrix(kinship_like=True) / 2
 
-# tree / genealogy pair
-agents = [(p,p) for p in probands]
+# tree / genealogy pair / branch-align
+# agents = [(p,p) for p in probands]
 parents = []
 keep_climbing = True
 count = 0
 choices = {}
-# TODO: ignore really bad decisions - score < 1e-9
+
+times = G.get_node_attributes('time')
+depth_map = {t: [] for t in range(max(times.values()))}
+for p in probands:
+    depth_map[0].append((p,p))
+time = 0
+
 while keep_climbing:
     gD = G.distance_matrix(kinship_like=True)
     scores = []
-    
+
+    agents = depth_map[time]
     for t_node, g_node in agents:
         t_parent =  T.parents(t_node)[0]
 
+        if g_node not in G.graph.nodes:
+            continue
         g_parents = G.parents(g_node)
         if not g_parents:
             continue
 
-        t_nodes = [t for t,g in agents]
-        g_nodes = [g for t,g in agents]
+        t_nodes = [t for t,_ in agents]
+        g_nodes = [g for _,g in agents]
         up_stat = tD[t_parent, t_nodes].todense()
 
         # calc with dot-products
@@ -64,32 +73,40 @@ while keep_climbing:
     if not scores:
         break
     ranking = sorted(scores, reverse=True)
-    best_score, best_t_node, best_g_node, best_g_parent = ranking[0]
-    agents.remove((best_t_node, best_g_node))
-    G.graph.remove_node(best_g_node)
-    print(count, ranking[0:max(len(ranking)-1,1)])
-
-    parents.append((best_t_node, best_g_parent))
+    best_score = ranking[0][0]
+    good_choices = [ch for ch in ranking if ch[0] == best_score]
     
-    if best_score > 1e-10:
-        choices[best_g_node] = best_t_node
+    for score, t_node, g_node, g_parent in good_choices:
+        depth_map[time].remove((t_node, g_node))
+        G.graph.remove_node(g_node)
+        print(count, score, t_node, g_node, g_parent)
+        parents.append((score, t_node, g_node, g_parent))
     
 
     if not agents:
-        # TODO merge parents
-        parent_count = Counter(g for t,g in parents)
+        
+        parents = [p for p in parents if p[0] > 1e-10]
+        for p in parents:
+            print(p)
+        parent_count = Counter(g for _,_,_,g in parents)
         merged_parents = set()
-        agents = []
-        for t_node, g_parent in parents:
+        
+        for score, t_node, g_node, g_parent in parents:
+            t = times[g_parent]
             if parent_count[g_parent] > 1:
                 # merge
                 t_parent = T.parents(t_node)[0]
                 if not g_parent in merged_parents:
                     merged_parents.add(g_parent)
-                    agents.append((t_parent, g_parent))
+                    depth_map[t].append((t_parent, g_parent))
+                    # agents.append((t_parent, g_parent))
+                    choices[t_parent] = g_parent
             else:
-                agents.append((t_node, g_parent))
-        print(agents)
+                # did not coalesce - keep climbing
+                depth_map[t].append((t_node, g_parent))
+        for a in agents:
+            print(a)
         parents = []
+        time += 1
 
-print(choices)
+incorrect = [(k,v) for (k,v) in choices.items() if k != v]
