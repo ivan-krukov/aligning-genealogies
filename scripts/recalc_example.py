@@ -13,7 +13,7 @@ def permute_idx(M, idx):
     P[idx_to] = M[idx_from]
     return P
 
-seed = 1
+seed = 7
 P = Pedigree.simulate_from_founders_with_sex(4, 3, avg_immigrants=4, seed=seed)
 G = DiploidGraph(P)
 G_copy = deepcopy(G)
@@ -37,7 +37,8 @@ count = 0
 choices = {}
 
 times = G.get_node_attributes('time')
-depth_map = {t: [] for t in range(max(times.values()))}
+max_time = max(times.values())
+depth_map = {t: [] for t in range(max_time+1)}
 for p in probands:
     depth_map[0].append((p,p))
 time = 0
@@ -50,7 +51,7 @@ while keep_climbing:
     for t_node, g_node in agents:
         t_parent =  T.parents(t_node)[0]
 
-        if g_node not in G.graph.nodes:
+        if g_node not in G.graph.nodes: # we took a wrong turn somewhere
             continue
         g_parents = G.parents(g_node)
         if not g_parents:
@@ -70,29 +71,36 @@ while keep_climbing:
             scores.append((float(right), t_node, g_node, g_parents[1]))
 
     count += 1
-    if not scores:
-        break
-    ranking = sorted(scores, reverse=True)
-    best_score = ranking[0][0]
-    good_choices = [ch for ch in ranking if ch[0] == best_score]
+    if scores:
+        ranking = sorted(scores, reverse=True)
+        best_score = ranking[0][0]
+        good_choices = [ch for ch in ranking if ch[0] == best_score]
     
-    for score, t_node, g_node, g_parent in good_choices:
-        depth_map[time].remove((t_node, g_node))
-        G.graph.remove_node(g_node)
-        print(count, score, t_node, g_node, g_parent)
-        parents.append((score, t_node, g_node, g_parent))
+        for score, t_node, g_node, g_parent in good_choices:
+            depth_map[time].remove((t_node, g_node))
+            G.graph.remove_node(g_node)
+            print(count, score, t_node, g_node, g_parent)
+            parents.append((score, t_node, g_node, g_parent))
     
 
-    if not agents:
+    if not agents or not scores:
         
         parents = [p for p in parents if p[0] > 1e-10]
+
+        # expand the parents with previous climbers
+        for t_node, g_parent in depth_map[time + 1]:
+            parents.append((-1, t_node, -1, g_parent))
+            
         for p in parents:
             print(p)
         parent_count = Counter(g for _,_,_,g in parents)
         merged_parents = set()
-        
+
+        # TODO merge with the other nodes we reached
         for score, t_node, g_node, g_parent in parents:
             t = times[g_parent]
+            # we can check if we are merging incorrectly here
+            # if t_parents for some agents are not the same, but we assign same g_parent
             if parent_count[g_parent] > 1:
                 # merge
                 t_parent = T.parents(t_node)[0]
@@ -104,9 +112,16 @@ while keep_climbing:
             else:
                 # did not coalesce - keep climbing
                 depth_map[t].append((t_node, g_parent))
-        for a in agents:
+        
+        time += 1
+        if time >= max_time:
+            keep_climbing = False
+
+        print(f"t = {time}")
+        for a in depth_map[time]:
             print(a)
         parents = []
-        time += 1
+        
+        
 
 incorrect = [(k,v) for (k,v) in choices.items() if k != v]
