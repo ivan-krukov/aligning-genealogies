@@ -5,16 +5,8 @@ from genealogy_aligner import Pedigree, DiploidGraph, Climber, Traversal
 from genealogy_aligner.utils import invert_dictionary
 from copy import deepcopy
 
-# this won't work in our case, since pedigree IDs are not contiguous
-def permute_idx(M, idx):
-    P = M.copy()
-    idx_from = np.array(list(idx.keys()))
-    idx_to   = np.array(list(idx.values()))
-    P[idx_to] = M[idx_from]
-    return P
-
-seed = 7
-P = Pedigree.simulate_from_founders_with_sex(4, 3, avg_immigrants=4, seed=seed)
+seed = 2
+P = Pedigree.simulate_from_founders_with_sex(10, 5, avg_immigrants=4, seed=seed)
 G = DiploidGraph(P)
 G_copy = deepcopy(G)
 H = G.sample_haploid_path(seed)
@@ -26,13 +18,11 @@ T = Traversal.from_tree_sequence(sim, msp_labels)
 probands = T.probands()
 assert (probands == G.probands())
 
-# TODO this is not giving the correct kinship for siblings
 tD = T.distance_matrix(kinship_like=True) / 2
 
-# tree / genealogy pair / branch-align
+# tree / genealogy pair
 # agents = [(p,p) for p in probands]
 parents = []
-keep_climbing = True
 count = 0
 choices = {}
 
@@ -43,7 +33,8 @@ for p in probands:
     depth_map[0].append((p,p))
 time = 0
 
-while keep_climbing:
+while time < max_time:
+    #TODO can we simplify the previous distance matrix without having to recalculate?
     gD = G.distance_matrix(kinship_like=True)
     scores = []
 
@@ -57,10 +48,12 @@ while keep_climbing:
         if not g_parents:
             continue
 
+        # get the current nodes being aligned
+        # TODO: can we use previously aligned parents here too?
         t_nodes = [t for t,_ in agents]
         g_nodes = [g for _,g in agents]
+        
         up_stat = tD[t_parent, t_nodes].todense()
-
         # calc with dot-products
         left  = gD[g_parents[0], g_nodes].todense() @ up_stat.T
         right = gD[g_parents[1], g_nodes].todense() @ up_stat.T if len(g_parents) == 2 else 0
@@ -87,16 +80,16 @@ while keep_climbing:
         
         parents = [p for p in parents if p[0] > 1e-10]
 
-        # expand the parents with previous climbers
+        merged_parents = set()
+        # expand the parents with previous climbers - next generation
         for t_node, g_parent in depth_map[time + 1]:
             parents.append((-1, t_node, -1, g_parent))
+            merged_parents.add(g_parent)
             
         for p in parents:
             print(p)
         parent_count = Counter(g for _,_,_,g in parents)
-        merged_parents = set()
 
-        # TODO merge with the other nodes we reached
         for score, t_node, g_node, g_parent in parents:
             t = times[g_parent]
             # we can check if we are merging incorrectly here
@@ -110,18 +103,16 @@ while keep_climbing:
                     # agents.append((t_parent, g_parent))
                     choices[t_parent] = g_parent
             else:
-                # did not coalesce - keep climbing
-                depth_map[t].append((t_node, g_parent))
+                if not g_parent in merged_parents:
+                    # did not coalesce - keep climbing
+                    depth_map[t].append((t_node, g_parent))
         
         time += 1
-        if time >= max_time:
-            keep_climbing = False
 
         print(f"t = {time}")
         for a in depth_map[time]:
             print(a)
         parents = []
-        
         
 
 incorrect = [(k,v) for (k,v) in choices.items() if k != v]
