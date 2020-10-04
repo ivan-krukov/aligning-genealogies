@@ -18,7 +18,7 @@ def get_graphviz_layout(graph, reverse=False):
 def draw(graph,
          # figure options:
          ax=None,
-         figsize=(8, 6),
+         figsize=(12, 6),
          reverse=False,
          # node subsetting options:
          node_subset=None,
