@@ -1,19 +1,30 @@
 import numpy as np
+import numpy.random as rnd
 import msprime as msp
-from collections import Counter
-from genealogy_aligner import Pedigree, DiploidGraph, Climber, Traversal
+from collections import Counter, defaultdict
+from genealogy_aligner import (
+    Pedigree,
+    DiploidGraph,
+    Climber,
+    Traversal,
+    Agent,
+    AgentSet,
+)
 from genealogy_aligner.utils import invert_dictionary
 from copy import deepcopy
+import networkx as nx
+from operator import itemgetter
 
-class Agent:
-    def __init__(self):
-        self.g_node = -1
-        self.t_node = -1
 
 seed = 1
-P = Pedigree.simulate_from_founders_with_sex(10, 4, avg_immigrants=1, seed=seed)
+# P = Pedigree.simulate_from_founders_with_sex(20, 7, avg_immigrants=10, seed=seed)
+P = Pedigree.simulate_from_founders_with_sex(4, 4, avg_immigrants=1, seed=seed)
+
+print(P.n_individuals)
 # P = Pedigree.from_balsac_table("data/test/example_3.tsv")
 G = DiploidGraph(P)
+nx.set_node_attributes(G.graph, G.infer_depth(forward=False), "depth")
+
 G_copy = deepcopy(G)
 # probands = [21, 25,28]
 probands = G.probands()
@@ -23,112 +34,111 @@ C, msprime_idx = H.to_tree_sequence(simplify=True)
 msp_labels = invert_dictionary(msprime_idx, one_to_one=True)
 sim = msp.simulate(from_ts=C, Ne=1000, random_seed=seed, model="dtwf")
 T = Traversal.from_tree_sequence(sim, msp_labels)
-# probands = T.probands()
-# assert (probands == G.probands())
 
-tD = T.distance_matrix(kinship_like=True) / 2
-gD = G.distance_matrix(kinship_like=True) / 2
-    
-parents = []
+tD = T.distance_matrix(kinship_like=True)
+# gD = G.distance_matrix(kinship_like=True)
+K, idx = G.kinship_lange()
+
 count = 0
-choices = []
+choices = defaultdict(list)
 
-times = G.get_node_attributes('time')
-max_time = max(times.values())
-depth_map = {t: [] for t in range(max_time+1)}
 # tree / genealogy
+
+agents = AgentSet(G, T)
 for p in probands:
-    depth_map[0].append((p, p))
+    agents.add(Agent(p, p, G, T, 1))
+
 time = 0
 
-while time < max_time:
-    #TODO can we simplify the previous distance matrix without having to recalculate?
+
+while time < G.generations:
     scores = []
+    for a in agents.at(time):
+        # t_parent =  T.parents(t_node)[0]
 
-    agents = depth_map[time]
-    for t_node, g_node in agents:
-        t_parent =  T.parents(t_node)[0]
-
-        if g_node not in G.graph.nodes: # we took a wrong turn somewhere
+        if a.g_node not in G.graph.nodes:  # we took a wrong turn somewhere
             continue
-        g_parents = G.parents(g_node)
-        if not g_parents:
+        if not a.g_parents():
+            continue
+        if not a.t_parent():
             continue
 
-        # get the current nodes being aligned
-        # TODO: can we use previously aligned parents here too?
-        t_nodes = [t for t,_ in agents]
-        g_nodes = [g for _,g in agents]
-        
-        up_stat = tD[t_parent, t_nodes].todense()
+        up_stat = tD[a.t_parent(), agents.t_nodes()].todense()
         # calc with dot-products
-        left  = gD[g_parents[0], g_nodes].todense() @ up_stat.T
-        right = gD[g_parents[1], g_nodes].todense() @ up_stat.T if len(g_parents) == 2 else 0
+        agent_idx = [idx[p] for p in agents.g_nodes()]
 
-        if left > right:
-            scores.append((float(left), t_node, g_node, g_parents[0]))
+        parent_scores = (
+            float(K[idx[a.g_parents()[0]], agent_idx] @ up_stat.T),
+            float(K[idx[a.g_parents()[1]], agent_idx] @ up_stat.T),
+        )
+
+        if parent_scores[0] > parent_scores[1]:
+            scores.append((parent_scores[0], a, a.g_parents()[0]))
+        elif parent_scores[0] < parent_scores[1]:
+            scores.append((parent_scores[1], a, a.g_parents()[1]))
         else:
-            scores.append((float(right), t_node, g_node, g_parents[1]))
+            # print("random choice")
+            rch = rnd.choice(2)
+            scores.append((parent_scores[rch], a, a.g_parents()[rch]))
 
     count += 1
     if scores:
-        ranking = sorted(scores, reverse=True)
+        ranking = sorted(scores, reverse=True, key=itemgetter(0))
         best_score = ranking[0][0]
+
         good_choices = [ch for ch in ranking if ch[0] == best_score]
-    
-        for score, t_node, g_node, g_parent in good_choices:
-            print(count, score, t_node, g_node, g_parent)
-            depth_map[time].remove((t_node, g_node))
-            # G.graph.remove_node(g_node)
-            parents.append((score, t_node, g_node, g_parent))
-    
+        for score, a, g_parent in good_choices:
+            b = Agent(g_parent, a.t_node, G, T, score)
+            agents.remove(a)
+            if score > 0:
+                agents.add(b)
+            # print(count, "{:.2}".format(score), a, "\t", b)
 
-    if not agents or not scores:
-        
-        parents = [p for p in parents if p[0] > 1e-10]
+    if not agents.at(time) or not scores:
 
-        # expand the parents with previous climbers - next generation
-        for t_node, g_parent in depth_map[time + 1]:
-            parents.append((-1, t_node, -1, g_parent))
-            # merged_parents.append(g_parent)
-            
-        # for p in parents:
-        #     print(p)
-        parent_count = Counter(g for _,_,_,g in parents)
-
-        # next_generation = []
-        for score, t_node, g_node, g_parent in parents:
-            t = times[g_parent]
-            # we can check if we are merging incorrectly here
-            # if t_parents for some agents are not the same, but we assign same g_parent
-            if parent_count[g_parent] > 1:
-                print(g_parent, parent_count[g_parent])
-                # merge
-                t_parent = T.parents(t_node)[0]
-                # if not g_parent in merged_parents:
-                # merged_parents.add(g_parent)
-                # if (t_parent, g_parennt) not in depth_map[t]:
-                depth_map[t].append((t_parent, g_parent))
-                # agents.append((t_parent, g_parent))
-                choices.append((t_parent, g_parent, score))
+        print("merging")
+        merge_candidates = sorted(
+            agents.at(time + 1), reverse=True, key=lambda c: c.score
+        )
+        visited = {}
+        updated = set()  # make sure we only advance the parent pointer once
+        for a in merge_candidates:
+            print(a)
+            if a.g_node not in visited.keys():
+                visited[a.g_node] = a
             else:
-                # if not g_parent in merged_parents:
-                    # did not coalesce - keep climbing
-                depth_map[t].append((t_node, g_parent))
-        time += 1
-        # merge
-        seen_parents = set()
-        next_generation = []
-        for agent in depth_map[time]:
-            print(agent)
-            if agent[1] not in seen_parents:
-                seen_parents.add(agent[1])
-                next_generation.append(agent)
-        print("seen ", seen_parents)
-        print("next ", next_generation)
-        depth_map[time] = next_generation
+                b = visited[a.g_node]
+                assert a.g_node == b.g_node
+                # merge
+                if a.g_node not in updated:
+                    # only update once - guaranteed best score since we sorted
+                    print("> ", a, b)
+                    visited[a.g_node].t_node = b.t_parent()  # advance by pointer
+                    choices[a.g_node].append(b)
+                    updated.add(a.g_node)
 
+                agents.remove(a)
+
+        print(agents.all())
+        time += 1
         print(f"t = {time}")
-        # for a in depth_map[time]:
-        #     print(a)
         parents = []
+
+
+correct_chromosome = defaultdict(int)
+correct_individual = defaultdict(int)
+off_by_one = defaultdict(int)
+total = defaultdict(int)
+
+for g_node, candidates in choices.items():
+    print(g_node)
+    print(candidates)
+    # d = agent.depth()
+
+    # cc = agent.t_node == g_node
+    # ci = cc or (agent.t_node == (g_node - 1))
+    # correct_chromosome[d] += cc
+    # correct_individual[d] += ci
+    # total[d] += 1
+
+    # print("\t", agent)
