@@ -17,8 +17,8 @@ from operator import itemgetter
 
 
 seed = 1
-# P = Pedigree.simulate_from_founders_with_sex(20, 7, avg_immigrants=10, seed=seed)
-P = Pedigree.simulate_from_founders_with_sex(4, 4, avg_immigrants=1, seed=seed)
+P = Pedigree.simulate_from_founders_with_sex(20, 10, avg_immigrants=10, seed=seed)
+# P = Pedigree.simulate_from_founders_with_sex(10, 6, avg_immigrants=10, seed=seed)
 
 print(P.n_individuals)
 # P = Pedigree.from_balsac_table("data/test/example_3.tsv")
@@ -40,7 +40,7 @@ tD = T.distance_matrix(kinship_like=True)
 K, idx = G.kinship_lange()
 
 count = 0
-choices = defaultdict(list)
+choices = {}
 
 # tree / genealogy
 
@@ -96,14 +96,14 @@ while time < G.generations:
 
     if not agents.at(time) or not scores:
 
-        print("merging")
+        # print("merging")
         merge_candidates = sorted(
             agents.at(time + 1), reverse=True, key=lambda c: c.score
         )
         visited = {}
         updated = set()  # make sure we only advance the parent pointer once
         for a in merge_candidates:
-            print(a)
+            # print(a)
             if a.g_node not in visited.keys():
                 visited[a.g_node] = a
             else:
@@ -112,14 +112,14 @@ while time < G.generations:
                 # merge
                 if a.g_node not in updated:
                     # only update once - guaranteed best score since we sorted
-                    print("> ", a, b)
+                    # print("> ", a, b)
                     visited[a.g_node].t_node = b.t_parent()  # advance by pointer
-                    choices[a.g_node].append(b)
+                    choices[a.g_node] = b
                     updated.add(a.g_node)
 
                 agents.remove(a)
 
-        print(agents.all())
+        # print(agents.all())
         time += 1
         print(f"t = {time}")
         parents = []
@@ -130,15 +130,12 @@ correct_individual = defaultdict(int)
 off_by_one = defaultdict(int)
 total = defaultdict(int)
 
-for g_node, candidates in choices.items():
-    print(g_node)
-    print(candidates)
-    # d = agent.depth()
+for g_node, agent in choices.items():
+    # print(g_node, agent)
+    d = agent.depth()
 
-    # cc = agent.t_node == g_node
-    # ci = cc or (agent.t_node == (g_node - 1))
-    # correct_chromosome[d] += cc
-    # correct_individual[d] += ci
-    # total[d] += 1
-
-    # print("\t", agent)
+    correct_chromosome[d] += agent.t_node == g_node
+    ci = ((agent.t_node + 1) // 2) == ((g_node + 1) // 2)
+    correct_individual[d] += ci
+    off_by_one[d] += ci or (g_node == agent.t_parent())
+    total[d] += 1
