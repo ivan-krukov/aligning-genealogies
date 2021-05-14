@@ -28,6 +28,7 @@ def read_samples(filename):
             sample_data.add_site (i, genotypes, alleles )
     return sample_data
 
+
 def infer_ts(filename):
     ''' Inferes tree sequence from genotype matrix
         Args: filename'''

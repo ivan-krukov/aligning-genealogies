@@ -123,6 +123,11 @@ def draw(graph,
     return ax
 
 
+def draw_aligner_path(hap, path_color='orange', **kwargs):
+    pass
+
+
+
 def draw_aligner(ped,
                  ts,
                  anchor_links,

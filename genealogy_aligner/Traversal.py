@@ -15,31 +15,20 @@ from .Genealogical import Genealogical
 
 class Traversal(Genealogical):
 
-    def __init__(self, graph=None):
+    def __init__(self, graph=None, haploid_probands=False):
 
         super().__init__(graph)
+        self.haploid_probands = haploid_probands
 
-        self.haploid_probands = False
-        self.ts_node_to_ped_node = None
-        self.ped_node_to_ts_edge = None
+    def to_coalescent_tree(self, add_common_ancestors=True, Ne=100):
+        """
+        Convert an inheritance path to a coalescent tree
+        :param add_common_ancestors:
+        :param Ne: The effective population size
+        (Used to draw coalescent generation times for out-of-pedigree nodes)
 
-    def similarity(self, G):
-        # A kinship-like distance function
-        n = G.n_individuals
-        K = np.zeros((n, n), dtype=float)
-
-        for i in range(n):
-            if i in self:
-                K[i, i] = 0.5
-                for j in range(i + 1, n):
-                    if j in self:
-                        if any(self.predecessors(j)):
-                            p = next(self.predecessors(j))
-                            K[i, j] = K[i, p] / 2
-                            K[j, i] = K[i, j]
-        return K
-
-    def to_coalescent_tree(self, add_common_ancestors=True, inplace=False):
+        :return:
+        """
 
         t_obj = copy.deepcopy(self)
 
@@ -98,25 +87,35 @@ class Traversal(Genealogical):
 
         t_obj.graph.remove_nodes_from(list(nx.isolates(t_obj.graph)))
 
-        # Set the time attribute for out-of-pedigree nodes to inf for now:
-        nx.set_node_attributes(
-            t_obj.graph, {ind: np.inf for ind in t_obj.nodes if int(ind) < 0}, "time"
+        # Handling for out-of-pedigree nodes:
+
+        out_ped = [n for n in t_obj.nodes if int(n) < 0]
+
+        # Set the time attribute for out-of-pedigree nodes to a sample from geometric
+        # distribution for now:
+        self.set_node_attributes({
+            n: np.random.geometric(1./Ne) + min([t_obj.get_node_attributes('time', s)
+                                                 for s in t_obj.successors(n)])
+            for n in out_ped
+        }, 'time')
+
+        t_obj.graph = nx.convert_node_labels_to_integers(
+            t_obj.graph,
+            first_label=1,
+            label_attribute='haplotype'
         )
 
-        t_obj.ts_node_to_ped_node = {
-            k: v for k, v in self.ts_node_to_ped_node.items() if k in t_obj.nodes
-        }
+        # Set the haplotype to None for out-of-pedigree nodes:
+        t_obj.set_node_attributes(
+            dict(
+                zip(out_ped, [None for _ in range(len(out_ped))])
+            ),
+            'haplotype'
+        )
 
-        t_obj.ped_node_to_ts_edge = {}
+        t_obj.set_edge_attributes(edges_to_skipped_nodes, 'path')
 
-        for edge in edges_to_skipped_nodes:
-            for n in edges_to_skipped_nodes[edge]:
-                t_obj.ped_node_to_ts_edge[n] = edge
-
-        if inplace:
-            self = t_obj
-        else:
-            return t_obj
+        return t_obj
 
     def distances(self):
         """Calculate distances between nodes in the Traversal

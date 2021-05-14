@@ -1,7 +1,27 @@
 import networkx as nx
 from collections.abc import Iterable
+from scipy.sparse import csr_matrix
 import numpy as np
 import pandas as pd
+
+
+def dict_to_csr(d, items):
+    """
+    Takes a dictionary of dictionaries where the first key is the row name
+    and the second key is the column name and converts into a scipy
+    sparse matrix format.
+    """
+
+    item_idx = dict(zip(items, range(len(items))))
+
+    row, col, data = [], [], []
+
+    for k1 in d:
+        row += list(np.repeat(item_idx[k1], len(d[k1])))
+        col += [item_idx[k2] for k2 in d[k1]]
+        data += list(d[k1].values())
+
+    return csr_matrix((data, (row, col)), shape=(len(items), len(items)))
 
 
 def invert_dictionary(d):

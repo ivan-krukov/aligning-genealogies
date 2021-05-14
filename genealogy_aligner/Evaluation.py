@@ -2,6 +2,51 @@ import numpy as np
 from .utils import soft_ordering
 
 
+class Evaluation(object):
+    """
+
+    """
+
+    def __init__(self, aligner, gt):
+
+        self.aligner = aligner
+        self.ground_truth = gt
+
+    def evaluate(self):
+
+        metrics = {}
+
+        if self.pred_ts_node_to_ped_node is None:
+            raise Exception("No pairs are predicted to be aligned. Call `align` first.")
+        else:
+            metrics['Node-Node Matching Accuracy'] = accuracy(
+                self.true_ts_node_to_ped_node.items(),
+                self.pred_ts_node_to_ped_node.items()
+            )
+
+        metrics['Proportion of Simple Symmetries'] = simple_symmetries(
+            self.ped,
+            self.true_ts_node_to_ped_node,
+            self.pred_ts_node_to_ped_node
+        )
+
+        if self.pred_ped_node_to_ts_edge is None:
+            if self.true_ped_node_to_ts_edge is None:
+                metrics['Node-Edge Matching Accuracy'] = None
+            elif len(self.true_ped_node_to_ts_edge) == 0:
+                metrics['Node-Edge Matching Accuracy'] = None
+            else:
+                metrics['Node-Edge Matching Accuracy'] = 0.0
+        else:
+            metrics['Node-Edge Matching Accuracy'] = accuracy(
+                self.true_ped_node_to_ts_edge.items(),
+                self.pred_ped_node_to_ts_edge.items()
+            )
+
+        return metrics
+
+
+
 def accuracy(pos_anchors, pred_anchors):
     """
     Defined as in Equation (13) of Trung et al.

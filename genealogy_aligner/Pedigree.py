@@ -39,16 +39,7 @@ class Pedigree(Genealogical):
         """
         For a given `node`, find its list of spouses in the pedigree
         """
-
-        spouses = list(set([
-            parent for child in self.successors(node)
-            for parent in self.predecessors(child) if parent != node
-        ]))
-
-        if len(spouses) == 0:
-            return [0]
-        else:
-            return spouses
+        return self.pairs(node)
 
     def kinship_lange(self, coefficient = 2, progress=True):
         """Calculate the kinship matrix using the Lange kinship algorithm
@@ -62,14 +53,14 @@ class Pedigree(Genealogical):
         G = self.graph
         label_gen = count(0)
         depth = self.infer_depth()
-        ordered_label = sorted(G.nodes, key=lambda n: depth[n])
-        ordered_index = [next(label_gen) for n in ordered_label]
+        ordered_label = sorted(G.nodes, key=depth.get)
+        ordered_index = [next(label_gen) for _ in ordered_label]
         
         index_to_label = dict(zip(ordered_index, ordered_label))
         label_to_index = dict(zip(ordered_label, ordered_index))
 
         n = len(G.nodes)
-        K = np.zeros((n,n), dtype=float)
+        K = np.zeros((n, n), dtype=float)
 
         for node_idx in tqdm(range(n), disable=not progress):
             node = index_to_label[node_idx]
@@ -287,7 +278,7 @@ class Pedigree(Genealogical):
             attr_dict = self.get_node_attributes(attr)
             for node in self.graph.nodes:
                 tbl[node][attr] = attr_dict[node]
-        
+
         sex = self.get_node_attributes('sex')
 
         for node, parent in self.iter_edges(forward=False):
@@ -463,6 +454,7 @@ class Pedigree(Genealogical):
             # if multiple subgraphs, return largest
             largest = max(nx.weakly_connected_components(ped.graph), key=len)
             ped.graph = nx.subgraph(ped.graph, largest)
+            ped.graph = nx.convert_node_labels_to_integers(ped.graph, first_label=1)
 
         return ped
 
@@ -549,6 +541,7 @@ class Pedigree(Genealogical):
             # if multiple subgraphs, return largest
             largest = max(nx.weakly_connected_components(ped.graph), key=len)
             ped.graph = nx.subgraph(ped.graph, largest)
+            ped.graph = nx.convert_node_labels_to_integers(ped.graph, first_label=1)
 
         return ped
 
@@ -570,7 +563,7 @@ class Pedigree(Genealogical):
             return draw(self.graph, **kwargs)
         else:
             if 'sex' in self.attributes:
-                sex_to_shape = {1: 's', 2: 'o', 3: 'p'}
+                sex_to_shape = {1: 's', 2: 'o', -1: 'p'}
                 return draw(self.graph, node_shape={
                     k: sex_to_shape[v] for k, v in self.get_node_attributes('sex').items()
                 }, **kwargs)

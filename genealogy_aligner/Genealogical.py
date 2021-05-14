@@ -8,6 +8,10 @@ import numpy as np
 
 
 class Genealogical(object):
+    """
+    TODO: Add a mechanism to flag probands (e.g. an attribute `is_sample`)
+    if it's not set, we can just assume leaves are our samples
+    """
 
     def __init__(self, graph=None):
         if graph is None:
@@ -17,22 +21,19 @@ class Genealogical(object):
 
     @property
     def n_individuals(self):
-        return len(self.nodes)
+        return len(self.graph)
 
     @property
     def edges(self):
-        return list(self.graph.edges())
+        return self.graph.edges()
 
     @property
     def nodes(self):
-        return list(self.graph.nodes())
+        return self.graph.nodes
 
     @property
     def attributes(self):
-        return list(list(self.graph.nodes(data=True))[0][1].keys())
-
-    def get_edge_attributes(self, attr):
-        return nx.get_edge_attributes(self.graph, attr)
+        return list(self.graph.nodes[next(iter(self.graph.nodes))].keys())
 
     def siblings(self, node):
         """
@@ -46,7 +47,22 @@ class Genealogical(object):
         ]))
 
     def parents(self, node):
-        return list(self.graph.predecessors(node))
+        return list(self.predecessors(node))
+
+    def pairs(self, node):
+        """
+        For a given haplotype, find its pair(s).
+        """
+
+        pairs = list(set([
+            parent for child in self.successors(node)
+            for parent in self.predecessors(child) if parent != node
+        ]))
+
+        if len(pairs) == 0:
+            return [0]
+        else:
+            return pairs
 
     def predecessors(self, node, k=1, include_intermediates=False, include_founders=False):
         """
@@ -54,7 +70,11 @@ class Genealogical(object):
         is true, this method also returns nodes that are <`k` steps away from `node`. If
         `include_founders` is True, this method returns founders that are less than `k`
         steps away from `node`.
+        TODO: Revert back to an implementation where you don't reverse the graph (extremely slow!)
         """
+
+        if k == 1:
+            return list(self.graph.predecessors(node))
 
         predecessors = nx.single_source_shortest_path_length(self.graph.reverse(), node,
                                                              cutoff=k)
@@ -81,6 +101,9 @@ class Genealogical(object):
         steps away from `node`.
         """
 
+        if k == 1:
+            return list(self.graph.successors(node))
+
         successors = nx.single_source_shortest_path_length(self.graph, node,
                                                            cutoff=k)
 
@@ -105,15 +128,29 @@ class Genealogical(object):
                 node_list.append(node)
         return node_list
 
+    def set_node_attributes(self, node_dict, attr):
+        nx.set_node_attributes(self.graph, node_dict, attr)
+
+    def set_edge_attributes(self, edge_dict, attr):
+        nx.set_edge_attributes(self.graph, edge_dict, attr)
+
     def get_node_attributes(self, attr, node=None):
 
-        node_attr = nx.get_node_attributes(self.graph, attr)
-
         if node is None:
-            return node_attr
+            return nx.get_node_attributes(self.graph, attr)
         else:
             try:
-                return node_attr[node]
+                return self.graph.nodes[node][attr]
+            except KeyError:
+                return {}
+
+    def get_edge_attributes(self, attr, edge=None):
+
+        if edge is None:
+            return nx.get_edge_attributes(self.graph, attr)
+        else:
+            try:
+                return self.graph.edges[edge][attr]
             except KeyError:
                 return {}
 
@@ -208,6 +245,10 @@ class Genealogical(object):
             d = depth[node]            
             if depth[child] <= d:
                 depth[child] = d + 1
+
+        # In case there are disconnected nodes (as in a Haplotype Graph):
+        for node in (set(self.nodes) - set(depth)):
+            depth[node] = 0
 
         return depth
 
@@ -325,7 +366,7 @@ class Genealogical(object):
 
     def similarity(self):
         # A kinship-like distance function
-        n = self.n_individuals        
+        n = self.n_individuals
         K = np.zeros((n,n), dtype=float)
 
         for i in range(n):

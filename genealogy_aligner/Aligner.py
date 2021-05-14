@@ -3,84 +3,34 @@ import networkx as nx
 import copy
 import numpy as np
 
-from .evaluation import accuracy, simple_symmetries
+from .Evaluation import accuracy, simple_symmetries
 from .utils import greedy_matching, soft_ordering, invert_dictionary
 from .Drawing import draw_aligner
 
 
 class Aligner(object):
 
-    def __init__(self, ped, ts):
+    def __init__(self, hap, arg):
         """
 
-        :param ped: A pedigree
-        :param ts: A traversal object
+        :param hap: A haplotype graph
+        :param arg: An ARG object (collection of tree sequences)
         """
 
-        self.ped = ped
-        self.ts = ts
+        self.hap = hap
+        self.arg = arg
 
-        if self.ts.haploid_probands:
-            self.ploidy = 1
-        else:
-            self.ploidy = 2
-
-        self.ped_probands = self.ped.probands()
-        self.ped_nonprobands = list(set(self.ped.nodes) - set(self.ped_probands))
-        self.ts_probands = self.ts.probands()
-        self.ts_nonprobands = list(set(self.ts.nodes) - set(self.ts_probands))
-
-        self.true_ts_node_to_ped_node = copy.copy(ts.ts_node_to_ped_node)
-
-        for n_ts in (set(self.ts.nodes) - set(ts.ts_node_to_ped_node)):
-            self.true_ts_node_to_ped_node[n_ts] = None
-
-        self.true_ped_node_to_ts_edge = copy.copy(ts.ped_node_to_ts_edge)
-
-        self.ts_proband_to_ped_proband = {
-            n_ts: n_ped
-            for n_ts, n_ped in self.true_ts_node_to_ped_node.items()
-            if n_ts in self.ts_probands
+        # Known mapping between probands in the ARG and haplotype graph:
+        self.proband_mapping = {
+            p: self.arg.get_node_attributes('haplotype', p) for p in self.arg.probands()
         }
 
-        self.pred_ts_node_to_ped_node = None
-        self.pred_ped_node_to_ts_edge = None
+        # Data structures to fill in predictions:
+        self.node_map = None
+        self.edge_map = None
 
     def align(self):
         raise NotImplementedError
-
-    def evaluate(self):
-
-        metrics = {}
-
-        if self.pred_ts_node_to_ped_node is None:
-            raise Exception("No pairs are predicted to be aligned. Call `align` first.")
-        else:
-            metrics['Node-Node Matching Accuracy'] = accuracy(
-                self.true_ts_node_to_ped_node.items(),
-                self.pred_ts_node_to_ped_node.items()
-            )
-
-        metrics['Proportion of Simple Symmetries'] = simple_symmetries(
-            self.ped,
-            self.true_ts_node_to_ped_node,
-            self.pred_ts_node_to_ped_node
-        )
-
-        if self.pred_ped_node_to_ts_edge is None:
-            if self.true_ped_node_to_ts_edge is None:
-                metrics['Node-Edge Matching Accuracy'] = None
-            elif len(self.true_ped_node_to_ts_edge) == 0:
-                metrics['Node-Edge Matching Accuracy'] = None
-            else:
-                metrics['Node-Edge Matching Accuracy'] = 0.0
-        else:
-            metrics['Node-Edge Matching Accuracy'] = accuracy(
-                self.true_ped_node_to_ts_edge.items(),
-                self.pred_ped_node_to_ts_edge.items()
-            )
-
-        return metrics
 
     def draw(self, use_predicted=False, exclude_probands=True,
              use_ped_labels=True, ped_kwargs=None, ts_kwargs=None, **kwargs):
@@ -117,8 +67,14 @@ class MatchingAligner(Aligner):
     step in the discrete alignment process.
     """
 
-    def __init__(self, ped, ts):
-        super().__init__(ped, ts)
+    def __init__(self, arg, ts):
+        super().__init__(arg, ts)
+
+        self.ts_proband_to_ped_proband = {
+            n_ts: n_ped
+            for n_ts, n_ped in self.true_ts_node_to_ped_node.items()
+            if n_ts in self.ts_probands
+        }
 
     def match(self, ped_dict, ts_dict):
         """
@@ -211,34 +167,10 @@ class MatchingAligner(Aligner):
 
         return self.pred_ped_node_to_ts_edge
 
-    def harmonize(self, g_matching, s_matching):
+    def harmonize(self, g_matching):
         """
         Helper method to harmonize greedy alignments.
         """
-
-        # -------------------------------------------------------
-        # ** Step 0 **: Number of mappings checks
-        # = = = = = = = = =
-        # Plan of action: In the diploid case, each individual in the pedigree is assigned to only 2
-        # different nodes in the tree sequence. In the haploid case, it is 1.
-
-        # invert the matching dictionary:
-        rev_g_matching = invert_dictionary(g_matching)
-
-        for ped_n, ts_n_li in rev_g_matching.items():
-            if ped_n is not None and len(ts_n_li) > self.ploidy:
-
-                ts_n_li = sorted(
-                    ts_n_li,
-                    key=lambda x: [sc for p_n, sc in s_matching[x] if p_n == ped_n][0],
-                    reverse=True
-                )
-
-                for ts_n in ts_n_li[2:]:
-                    for ped_n2, sc in s_matching[ts_n]:
-                        if ped_n2 in rev_g_matching:
-                            if ped_n2 != ped_n and len(rev_g_matching[ped_n2]) < self.ploidy:
-                                g_matching[ts_n] = ped_n2
 
         # -------------------------------------------------------
         # ** Step 1 **: Dealing with out-of-pedigree nodes
@@ -291,87 +223,6 @@ class MatchingAligner(Aligner):
                                 ts_n_pred.extend(self.ts.predecessors(curr_node))
                                 ts_n_pred = ts_n_pred[1:]
 
-        # -------------------------------------------------------
-        # ** Step 2 **: Logical check for diploid matchings:
-        # = = = = = = = = =
-        # Plan of action: In the diploid case, if an individual in the pedigree is assigned to 2
-        # nodes in the tree sequence, then those nodes cannot be ancestral to each
-        # other (they have to be on separate branches of the tree).
-        #
-        # TODO: This code is broken and causes infinite loops.
-
-        """
-        if self.ploidy == 2:
-
-            # Invert the matching dictionary
-            rev_g_matching = invert_dictionary(g_matching)
-
-            for ped_n, ts_n_li in rev_g_matching.items():
-                # If there are 2 items in the list:
-                if len(ts_n_li) == 2:
-                    # If the first item is ancestral to the second:
-                    if ts_n_li[0] in self.ts.predecessors(ts_n_li[1],
-                                                          k=None,
-                                                          include_intermediates=True):
-                        del g_matching[ts_n_li[0]]
-                    # If the second item is ancestral to the first:
-                    elif ts_n_li[1] in self.ts.predecessors(ts_n_li[0],
-                                                            k=None,
-                                                            include_intermediates=True):
-                        del g_matching[ts_n_li[1]]
-        """
-        # -------------------------------------------------------
-        # ** Step 3 **: Checking time-order of mappings
-        # = = = = = = = = =
-        # Plan of action: For an aligned pair (n_ts, n_ped),
-        # make sure that their successors and predecessors preserve their time-ordering.
-
-        '''
-        for ts_n, ped_n in g_matching.items ():
-
-            ts_n_time = self.ts.get_node_attributes ( 'time', ts_n )
-            ped_n_time = self.ped.get_node_attributes ( 'time', ped_n )
-
-            ts_pred_list = self.ts.predecessors ( ts_n )
-            ts_succ_list = self.ts.successors ( ts_n )
-
-            # Preserving time ordering of predecessors: Regardless of how we infer time,
-            # times of predecessor at pedigree and tree sequence, must be both larger or
-            # both smaller than current time.
-
-            for ts_n_pred in ts_pred_list:
-                for ts_n_succ in ts_succ_list:
-                    if (ts_n_pred is None) or (ts_n_succ is None):
-                        continue
-                    else:
-                        if ts_n_pred in g_matching and g_matching[ts_n_pred] is not None:
-                            ped_n_pred = list ( g_matching[ts_n_pred] )
-
-                        if ts_n_succ in g_matching and g_matching[ts_n_succ] is not None:
-                            ped_n_succ = list ( g_matching[ts_n_succ] )
-
-                        ts_n_pred_time = self.ts.get_node_attributes ( 'time', ts_n_pred )
-                        ped_n_pred_time = []
-                        for i in range ( len ( ped_n_pred ) ):
-                            ped_n_pred_time[i] = self.ts.get_node_attributes ( 'time', ped_n_pred[i] )
-
-                        if ((ts_n_pred_time - ts_n_time) *
-                                (ped_n_pred_time[i] - ped_n_time) < 0):
-                            del ped_n_pred[i]
-
-                        ts_n_succ_time = self.ts.get_node_attributes ( 'time', ts_n_succ )
-                        ped_n_succ_time = []
-                        for i in range ( len ( ped_n_succ ) ):
-                            ped_n_succ_time[i] = self.ts.get_node_attributes ( 'time', ped_n_succ[i] )
-
-                        if ((ts_n_succ_time - ts_n_time) *
-                                (ped_n_succ_time[i] - ped_n_time) < 0):
-                            del ped_n_pred[i]
-
-                        if not (((ts_n_succ_time > ts_n_time) and (ts_n_time > ts_n_pred_time))
-                                or ((ts_n_succ_time < ts_n_time) and (ts_n_time < ts_n_pred_time))):
-                            del ped_n_succ, ped_n_pred
-        '''
         return g_matching
 
 
