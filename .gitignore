@@ -4,3 +4,5 @@
 poetry.lock
 .ipynb_checkpoints
 doc/bulid/
+.pytest_cache
+.idea
