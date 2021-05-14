@@ -177,7 +177,6 @@ def draw_interactive(genea_obj, **kwargs):
     This method facilitates drawing interactive genealogical objects
     by providing an interface for `focused view`, where we may zoom in
     on a subset of the nodes only.
-
     :param genea_obj:
     :return:
     """
