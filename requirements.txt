@@ -34,7 +34,7 @@ jupyter-core==4.6.3
 kiwisolver==1.2.0
 MarkupSafe==1.1.1
 matplotlib==3.2.1
-mistune==0.8.4
+mistune==2.0.3
 more-itertools==8.4.0
 msprime @ git+https://github.com/DomNelson/msprime.git@37c546f5c6d2a9e104f6b3a4eef2e9e34fea5911
 nbconvert==5.6.1
