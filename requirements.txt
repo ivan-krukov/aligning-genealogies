@@ -37,7 +37,7 @@ matplotlib==3.2.1
 mistune==0.8.4
 more-itertools==8.4.0
 msprime @ git+https://github.com/DomNelson/msprime.git@37c546f5c6d2a9e104f6b3a4eef2e9e34fea5911
-nbconvert==5.6.1
+nbconvert==6.3.0
 nbformat==5.0.7
 networkx==2.4
 newick==1.0.0
